@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as authService from '../services/auth.js';
-import * as store from '../storage/fileStore.js';
+import * as store from '../storage/index.js';
 
 const router = Router();
 

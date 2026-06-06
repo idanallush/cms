@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import sitesRouter from './routes/sites.js';
 import authRouter from './routes/auth.js';
 import editorRouter from './routes/editor.js';
+import publishRouter from './routes/publish.js';
+import chatRouter from './routes/chat.js';
 import { requireOwner } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import * as store from './storage/fileStore.js';
+import { getStore } from './storage/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -41,6 +43,8 @@ app.get('/health', (req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/sites', sitesRouter);
+app.use('/api/sites', publishRouter);
+app.use('/api/sites', chatRouter);
 app.use('/editor', editorRouter);
 
 app.get('/login', (req, res) => {
@@ -49,6 +53,7 @@ app.get('/login', (req, res) => {
 
 app.get('/login/:siteId', async (req, res) => {
   const { siteId } = req.params;
+  const store = await getStore();
   if (!(await store.siteExists(siteId))) {
     return res.status(404).send('<h1>Site not found</h1>');
   }
@@ -66,8 +71,22 @@ app.get('/logout', (req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Client CMS running on port ${PORT}`);
-});
+// Initialize storage and start server
+async function start() {
+  try {
+    // Initialize storage (connects to MongoDB if MONGODB_URI is set)
+    await getStore();
+    console.log('Storage initialized');
+  } catch (err) {
+    console.error('Storage init error:', err.message);
+    // Continue anyway for file-based storage fallback
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Client CMS running on port ${PORT}`);
+  });
+}
+
+start();
 
 export default app;

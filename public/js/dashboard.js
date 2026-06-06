@@ -72,9 +72,13 @@
             <span>${site.versionCount || 0} versions</span>
             <span>Created ${formatDate(site.createdAt)}</span>
           </div>
+          ${site.publishUrl ? `<div class="site-card-publish">
+            <a href="${escapeAttr(site.publishUrl)}" target="_blank" rel="noopener" class="publish-link-badge">Live: ${escapeHtml(site.publishUrl)}</a>
+          </div>` : ''}
           <div class="site-card-actions">
             <button class="btn-primary btn-small" data-action="edit" data-id="${site.siteId}">Edit</button>
             <button class="btn-secondary btn-small" data-action="preview" data-id="${site.siteId}">Preview</button>
+            <button class="btn-publish-card btn-small" data-action="publish" data-id="${site.siteId}">Publish</button>
             <button class="btn-secondary btn-small" data-action="settings" data-id="${site.siteId}" data-name="${escapeAttr(site.name)}">Settings</button>
           </div>
         `;
@@ -90,6 +94,28 @@
       sitesGrid.querySelectorAll('[data-action="preview"]').forEach(btn => {
         btn.addEventListener('click', () => {
           window.open(`${API}/${btn.dataset.id}/preview`, '_blank');
+        });
+      });
+
+      sitesGrid.querySelectorAll('[data-action="publish"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = 'Publishing...';
+          try {
+            const res = await fetch(`${API}/${btn.dataset.id}/publish`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showToast(`Published: ${data.url}`, 'success');
+              loadSites();
+            } else {
+              showToast(data.error?.message || 'Publish failed', 'error');
+            }
+          } catch {
+            showToast('Publish failed', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Publish';
+          }
         });
       });
 

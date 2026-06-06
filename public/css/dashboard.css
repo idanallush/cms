@@ -375,6 +375,43 @@ body {
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* Publish */
+.site-card-publish {
+  margin-bottom: 10px;
+}
+
+.publish-link-badge {
+  color: #2ecc71;
+  font-size: 12px;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.publish-link-badge:hover {
+  text-decoration: underline;
+}
+
+.btn-publish-card {
+  padding: 6px 12px;
+  background: #2ecc71;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-publish-card:hover:not(:disabled) {
+  background: #27ae60;
+}
+
+.btn-publish-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .hidden {
   display: none !important;
 }

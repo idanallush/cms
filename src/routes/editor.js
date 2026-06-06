@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireSiteAccess } from '../middleware/auth.js';
-import * as store from '../storage/fileStore.js';
+import * as store from '../storage/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();

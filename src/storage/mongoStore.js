@@ -1,0 +1,201 @@
+import mongoose from 'mongoose';
+
+const { Schema, model } = mongoose;
+
+// ── Schemas ──
+
+const siteSchema = new Schema({
+  siteId: { type: String, required: true, unique: true, index: true },
+  name: { type: String, required: true },
+  originalUrl: { type: String, required: true },
+  frozenTemplate: { type: String, default: '' },
+  contentMap: { type: Schema.Types.Mixed, default: {} },
+  slotCount: { type: Number, default: 0 },
+  clientPasswordHash: { type: String, default: null },
+  customDomain: { type: String, default: null },
+  lastEditedAt: { type: Date, default: Date.now },
+  publishedAt: { type: Date, default: null },
+  publishUrl: { type: String, default: null },
+  vercelProjectId: { type: String, default: null },
+  vercelDeploymentId: { type: String, default: null },
+}, { timestamps: true });
+
+const versionSchema = new Schema({
+  siteId: { type: String, required: true, index: true },
+  contentMap: { type: Schema.Types.Mixed, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+versionSchema.index({ siteId: 1, createdAt: -1 });
+
+const Site = model('Site', siteSchema);
+const Version = model('Version', versionSchema);
+
+// ── Connection ──
+
+let connected = false;
+
+export async function connect() {
+  if (connected) return;
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI not set');
+  await mongoose.connect(uri);
+  connected = true;
+  console.log('MongoDB connected');
+}
+
+// ── Storage API (same interface as fileStore) ──
+
+export async function ensureSiteDir(siteId) {
+  // No-op for MongoDB
+}
+
+export async function saveMeta(siteId, meta) {
+  const existing = await Site.findOne({ siteId });
+  if (existing) {
+    Object.assign(existing, meta);
+    await existing.save();
+  } else {
+    await Site.create(meta);
+  }
+}
+
+export async function getMeta(siteId) {
+  const site = await Site.findOne({ siteId }).lean();
+  if (!site) return null;
+  return {
+    siteId: site.siteId,
+    name: site.name,
+    originalUrl: site.originalUrl,
+    createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+    lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+    slotCount: site.slotCount,
+    clientPasswordHash: site.clientPasswordHash,
+    customDomain: site.customDomain,
+    publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+    publishUrl: site.publishUrl,
+    vercelProjectId: site.vercelProjectId,
+    vercelDeploymentId: site.vercelDeploymentId,
+  };
+}
+
+export async function saveTemplate(siteId, html) {
+  await Site.updateOne({ siteId }, { frozenTemplate: html });
+}
+
+export async function getTemplate(siteId) {
+  const site = await Site.findOne({ siteId }, { frozenTemplate: 1 }).lean();
+  return site?.frozenTemplate || null;
+}
+
+export async function saveContent(siteId, contentMap) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  await Version.create({ siteId, contentMap, createdAt: new Date() });
+  await Site.updateOne({ siteId }, { contentMap });
+
+  return timestamp;
+}
+
+export async function getContent(siteId) {
+  const site = await Site.findOne({ siteId }, { contentMap: 1 }).lean();
+  return site?.contentMap || null;
+}
+
+export async function listVersions(siteId) {
+  const versions = await Version.find({ siteId })
+    .sort({ createdAt: -1 })
+    .select({ createdAt: 1 })
+    .lean();
+
+  return versions.map(v => v.createdAt.toISOString().replace(/[:.]/g, '-'));
+}
+
+export async function getVersion(siteId, versionId) {
+  // Convert versionId back to approximate date for querying
+  const isoStr = versionId
+    .replace(/-/g, (m, offset) => {
+      if (offset === 4 || offset === 7) return '-';
+      if (offset === 10) return 'T';
+      if (offset === 13 || offset === 16) return ':';
+      if (offset === 19) return '.';
+      return m;
+    });
+
+  const targetDate = new Date(isoStr);
+  if (isNaN(targetDate.getTime())) return null;
+
+  // Find version within 1 second of the target timestamp
+  const version = await Version.findOne({
+    siteId,
+    createdAt: {
+      $gte: new Date(targetDate.getTime() - 1000),
+      $lte: new Date(targetDate.getTime() + 1000),
+    },
+  }).lean();
+
+  return version?.contentMap || null;
+}
+
+export async function siteExists(siteId) {
+  const count = await Site.countDocuments({ siteId });
+  return count > 0;
+}
+
+export async function listAllSites() {
+  const sites = await Site.find({}, {
+    frozenTemplate: 0,
+    contentMap: 0,
+  }).lean();
+
+  const result = [];
+  for (const site of sites) {
+    const versionCount = await Version.countDocuments({ siteId: site.siteId });
+    result.push({
+      siteId: site.siteId,
+      name: site.name,
+      originalUrl: site.originalUrl,
+      createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+      lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+      slotCount: site.slotCount,
+      clientPasswordHash: site.clientPasswordHash,
+      customDomain: site.customDomain,
+      publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+      publishUrl: site.publishUrl,
+      vercelProjectId: site.vercelProjectId,
+      vercelDeploymentId: site.vercelDeploymentId,
+      versionCount,
+    });
+  }
+
+  return result;
+}
+
+export async function deleteSite(siteId) {
+  const result = await Site.deleteOne({ siteId });
+  await Version.deleteMany({ siteId });
+  return result.deletedCount > 0;
+}
+
+export async function updateMeta(siteId, updates) {
+  const site = await Site.findOneAndUpdate(
+    { siteId },
+    { $set: updates },
+    { returnDocument: 'after', lean: true }
+  );
+  if (!site) return null;
+  return {
+    siteId: site.siteId,
+    name: site.name,
+    originalUrl: site.originalUrl,
+    createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+    lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+    slotCount: site.slotCount,
+    clientPasswordHash: site.clientPasswordHash,
+    customDomain: site.customDomain,
+    publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+    publishUrl: site.publishUrl,
+    vercelProjectId: site.vercelProjectId,
+    vercelDeploymentId: site.vercelDeploymentId,
+  };
+}

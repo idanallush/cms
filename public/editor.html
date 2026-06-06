@@ -16,10 +16,12 @@
       <span id="changes-indicator" class="changes-indicator hidden">0 unsaved changes</span>
     </div>
     <div class="toolbar-right">
+      <button id="btn-chat" class="toolbar-btn btn-ai" title="AI Chat">AI</button>
       <button id="btn-save" class="toolbar-btn btn-primary" disabled>
         Save
         <span id="save-badge" class="save-badge hidden">0</span>
       </button>
+      <button id="btn-publish" class="toolbar-btn btn-publish">Publish</button>
       <button id="btn-history" class="toolbar-btn btn-secondary">History</button>
       <button id="btn-preview" class="toolbar-btn btn-secondary">Preview</button>
     </div>
@@ -35,9 +37,32 @@
       </div>
       <div id="history-list" class="history-list"></div>
     </div>
+
+    <!-- AI Chat Panel -->
+    <div id="chat-panel" class="chat-panel hidden">
+      <div class="chat-header">
+        <h3>AI Assistant</h3>
+        <button id="btn-close-chat" class="history-close">&times;</button>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <div class="chat-msg chat-msg-system">
+          Tell me what you'd like to change on the site. For example: "Change the main heading to Welcome" or "Update the phone number to 050-1234567"
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Describe what to change..." maxlength="2000">
+        <button id="btn-send-chat" class="toolbar-btn btn-primary">Send</button>
+      </div>
+    </div>
   </div>
 
   <div id="toast-container"></div>
+
+  <!-- Publish status bar -->
+  <div id="publish-bar" class="publish-bar hidden">
+    <span id="publish-status-text"></span>
+    <a id="publish-link" href="#" target="_blank" rel="noopener" class="hidden">View live site</a>
+  </div>
 
   <!-- Image edit popover -->
   <div id="popover-image" class="popover hidden">

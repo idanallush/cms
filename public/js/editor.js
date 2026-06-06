@@ -12,11 +12,25 @@
   const saveBadge = document.getElementById('save-badge');
   const btnHistory = document.getElementById('btn-history');
   const btnPreview = document.getElementById('btn-preview');
+  const btnPublish = document.getElementById('btn-publish');
+  const btnChat = document.getElementById('btn-chat');
   const changesIndicator = document.getElementById('changes-indicator');
   const historyPanel = document.getElementById('history-panel');
   const historyList = document.getElementById('history-list');
   const btnCloseHistory = document.getElementById('btn-close-history');
   const toastContainer = document.getElementById('toast-container');
+
+  // Chat refs
+  const chatPanel = document.getElementById('chat-panel');
+  const chatMessages = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+  const btnSendChat = document.getElementById('btn-send-chat');
+  const btnCloseChat = document.getElementById('btn-close-chat');
+
+  // Publish refs
+  const publishBar = document.getElementById('publish-bar');
+  const publishStatusText = document.getElementById('publish-status-text');
+  const publishLink = document.getElementById('publish-link');
 
   // Image popover refs
   const popoverImage = document.getElementById('popover-image');
@@ -36,6 +50,7 @@
   let pendingChanges = {};
   let activePopoverTarget = null;
   let saving = false;
+  let publishing = false;
 
   // ── Toast ──
 
@@ -424,6 +439,148 @@
     updateChangesUI();
   }
 
+  // ── Publish ──
+
+  btnPublish.addEventListener('click', async () => {
+    if (publishing) return;
+
+    // Warn if there are unsaved changes
+    if (Object.keys(pendingChanges).length > 0) {
+      if (!confirm('You have unsaved changes. Save first before publishing?')) return;
+      btnSave.click();
+      return;
+    }
+
+    publishing = true;
+    btnPublish.textContent = 'Publishing...';
+    btnPublish.disabled = true;
+
+    try {
+      const res = await fetch(`${API}/publish`, { method: 'POST' });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast('Site published successfully!', 'success');
+        showPublishBar(data.url);
+      } else {
+        showToast(data.error?.message || 'Publish failed', 'error');
+      }
+    } catch (err) {
+      showToast('Publish failed: ' + err.message, 'error');
+    } finally {
+      publishing = false;
+      btnPublish.textContent = 'Publish';
+      btnPublish.disabled = false;
+    }
+  });
+
+  function showPublishBar(url) {
+    publishStatusText.textContent = 'Published:';
+    publishLink.href = url;
+    publishLink.textContent = url;
+    publishLink.classList.remove('hidden');
+    publishBar.classList.remove('hidden');
+  }
+
+  async function loadPublishStatus() {
+    try {
+      const res = await fetch(`${API}/publish`);
+      const data = await res.json();
+      if (data.published && data.publishUrl) {
+        showPublishBar(data.publishUrl);
+      }
+    } catch {
+      // Ignore errors loading publish status
+    }
+  }
+
+  // ── AI Chat ──
+
+  btnChat.addEventListener('click', () => {
+    chatPanel.classList.toggle('hidden');
+    if (!chatPanel.classList.contains('hidden')) {
+      chatInput.focus();
+    }
+  });
+
+  btnCloseChat.addEventListener('click', () => {
+    chatPanel.classList.add('hidden');
+  });
+
+  function addChatMessage(text, type) {
+    const msg = document.createElement('div');
+    msg.className = `chat-msg chat-msg-${type}`;
+    msg.textContent = text;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function sendChatMessage() {
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    chatInput.value = '';
+    addChatMessage(message, 'user');
+    btnSendChat.disabled = true;
+    btnSendChat.textContent = '...';
+
+    try {
+      const res = await fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        addChatMessage(data.message, 'ai');
+
+        if (data.applied && Object.keys(data.changes).length > 0) {
+          // Apply AI changes as pending changes
+          for (const [slotId, newValue] of Object.entries(data.changes)) {
+            if (contentMap[slotId]) {
+              const oldValue = contentMap[slotId].value;
+              addPendingChange(slotId, oldValue, newValue);
+
+              // Update visual in iframe
+              const doc = iframe.contentDocument;
+              if (doc) {
+                const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+                if (el) {
+                  const slot = contentMap[slotId];
+                  if (slot.type === 'text') el.textContent = newValue;
+                  else if (slot.type === 'image') el.src = newValue;
+                  else if (slot.type === 'link') el.href = newValue;
+                }
+              }
+            }
+          }
+
+          const count = Object.keys(data.changes).length;
+          addChatMessage(
+            `Applied ${count} change${count > 1 ? 's' : ''}. Click Save to keep them.`,
+            'system'
+          );
+        }
+      } else {
+        addChatMessage(data.error?.message || 'Something went wrong', 'system');
+      }
+    } catch (err) {
+      addChatMessage('Connection error: ' + err.message, 'system');
+    } finally {
+      btnSendChat.disabled = false;
+      btnSendChat.textContent = 'Send';
+    }
+  }
+
+  btnSendChat.addEventListener('click', sendChatMessage);
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
   // ── History ──
 
   btnHistory.addEventListener('click', () => {
@@ -461,7 +618,6 @@
           return m;
         });
 
-        const label = i === 0 ? 'Latest' : formatDate(timestamp);
         const timeDisplay = formatDate(timestamp);
 
         item.innerHTML = `
@@ -531,6 +687,7 @@
       await loadMeta();
       await loadContent();
       loadIframe();
+      loadPublishStatus();
     } catch (err) {
       showToast('Failed to load site: ' + err.message, 'error');
     }

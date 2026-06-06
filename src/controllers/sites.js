@@ -3,7 +3,7 @@ import { ingestUrl } from '../services/ingest.js';
 import { renderTemplate } from '../services/template.js';
 import { validateChanges } from '../services/guardian.js';
 import { hashPassword } from '../services/auth.js';
-import * as store from '../storage/fileStore.js';
+import * as store from '../storage/index.js';
 
 export async function listSites(req, res) {
   const sites = await store.listAllSites();
