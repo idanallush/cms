@@ -35,6 +35,12 @@ export function validateChanges(changes, currentContentMap) {
         continue;
       }
       sanitizedChanges[slotId] = { ...slot, value: valueStr };
+    } else if (slot.type === 'richtext') {
+      if (STRUCTURAL_TAGS.has(slot.tag) && valueStr.trim() === '') {
+        errors.push(`Slot "${slotId}" (${slot.tag}) is a structural element and cannot be empty`);
+        continue;
+      }
+      sanitizedChanges[slotId] = { ...slot, value: valueStr };
     } else if (slot.type === 'image') {
       if (!URL_REGEX.test(valueStr)) {
         errors.push(`Slot "${slotId}": image URL must be a valid http/https URL`);

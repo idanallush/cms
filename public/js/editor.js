@@ -132,7 +132,8 @@
       const el = doc.querySelector(`[data-slot-id*="${last.slotId}"]`);
       if (el) {
         const slot = contentMap[last.slotId];
-        if (slot?.type === 'text') el.textContent = last.oldValue;
+        if (slot?.type === 'richtext') el.innerHTML = last.oldValue;
+        else if (slot?.type === 'text') el.textContent = last.oldValue;
         else if (slot?.type === 'image') el.src = last.oldValue;
         else if (slot?.type === 'link') el.href = last.oldValue;
       }
@@ -335,7 +336,7 @@
     propLinkSection.classList.add('hidden');
 
     // Populate based on type
-    if (slotType === 'text') {
+    if (slotType === 'text' || slotType === 'richtext') {
       propTextSection.classList.remove('hidden');
       const slot = contentMap[mainSlotId];
       propTextInput.value = slot?.value || el.textContent.trim();
@@ -452,12 +453,16 @@
     if (!selectedSlot) return;
     const { el, slotType, slotIds } = selectedSlot;
 
-    if (slotType === 'text') {
+    if (slotType === 'text' || slotType === 'richtext') {
       const mainSlotId = slotIds[0];
       const oldVal = contentMap[mainSlotId]?.value || '';
       const newVal = propTextInput.value.trim();
       if (newVal !== oldVal) {
-        el.textContent = newVal;
+        if (slotType === 'richtext') {
+          el.innerHTML = newVal;
+        } else {
+          el.textContent = newVal;
+        }
         addPendingChange(mainSlotId, oldVal, newVal);
       }
     } else if (slotType === 'image') {
@@ -858,7 +863,8 @@
                 const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
                 if (el) {
                   const slot = contentMap[slotId];
-                  if (slot.type === 'text') el.textContent = newValue;
+                  if (slot.type === 'richtext') el.innerHTML = newValue;
+                  else if (slot.type === 'text') el.textContent = newValue;
                   else if (slot.type === 'image') el.src = newValue;
                   else if (slot.type === 'link') el.href = newValue;
                 }

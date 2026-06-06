@@ -1,3 +1,4 @@
+import * as cheerio from 'cheerio';
 import { renderTemplate } from './template.js';
 import * as store from '../storage/index.js';
 
@@ -10,27 +11,25 @@ async function getVercelConfig() {
   return { token, teamId };
 }
 
-/**
- * Generate clean HTML for publishing (no editor attributes)
- */
 export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
   let html = renderTemplate(frozenTemplate, contentMap, styles);
 
-  // Remove editor-specific attributes
-  html = html.replace(/\s*data-slot-id="[^"]*"/g, '');
-  html = html.replace(/\s*data-slot-type="[^"]*"/g, '');
+  // Use Cheerio to cleanly remove editor attributes
+  const $ = cheerio.load(html, { decodeEntities: false });
+  $('[data-slot-id]').removeAttr('data-slot-id');
+  $('[data-slot-type]').removeAttr('data-slot-type');
 
-  // Inject SEO meta tags if not already present
+  // Inject SEO meta tags
   const seoBlock = buildSeoBlock(meta);
   if (seoBlock) {
-    if (html.includes('</head>')) {
-      html = html.replace('</head>', `${seoBlock}\n</head>`);
-    } else if (html.includes('<body')) {
-      html = html.replace('<body', `<head>${seoBlock}</head>\n<body`);
+    if ($('head').length) {
+      $('head').append(seoBlock);
+    } else if ($('body').length) {
+      $('body').before(`<head>${seoBlock}</head>`);
     }
   }
 
-  return html;
+  return $.html();
 }
 
 function buildSeoBlock(meta) {
@@ -73,9 +72,6 @@ function escapeAttr(str) {
   return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
-/**
- * Deploy site to Vercel via API v13
- */
 export async function publishToVercel(siteId) {
   const { token: VERCEL_TOKEN, teamId } = await getVercelConfig();
   if (!VERCEL_TOKEN) {
@@ -92,10 +88,8 @@ export async function publishToVercel(siteId) {
   const styles = await store.getStyles(siteId);
   const html = generatePublishHtml(template, content, meta, styles);
 
-  // Project name: sanitized site name
   const projectName = `cms-${siteId.slice(0, 8)}`;
 
-  // Create deployment via Vercel API v13
   const deployRes = await fetch(`${VERCEL_API}/v13/deployments`, {
     method: 'POST',
     headers: {
@@ -125,7 +119,6 @@ export async function publishToVercel(siteId) {
 
   const deployment = await deployRes.json();
 
-  // Update site meta with publish info
   await store.updateMeta(siteId, {
     publishedAt: new Date().toISOString(),
     publishUrl: `https://${deployment.url}`,
@@ -141,9 +134,6 @@ export async function publishToVercel(siteId) {
   };
 }
 
-/**
- * Get publish status for a site
- */
 export async function getPublishStatus(siteId) {
   const meta = await store.getMeta(siteId);
   if (!meta) return null;

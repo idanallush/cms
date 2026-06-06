@@ -1,3 +1,5 @@
+import * as cheerio from 'cheerio';
+
 const UNIT_PROPS = new Set([
   'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
   'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
@@ -35,46 +37,59 @@ function buildInlineStyle(overrides) {
 }
 
 export function renderTemplate(frozenTemplate, contentMap, styles) {
-  let html = frozenTemplate;
+  const $ = cheerio.load(frozenTemplate, { decodeEntities: false });
 
   for (const [slotId, slot] of Object.entries(contentMap)) {
-    const placeholder = `{{${slotId}}}`;
-    html = html.replaceAll(placeholder, slot.value);
+    // Handle multi-slot elements (links, images with comma-separated IDs)
+    const els = $(`[data-slot-id="${slotId}"]`);
+    // Also find elements where slotId is part of a comma-separated list
+    const multiEls = $('[data-slot-id]').filter((_, el) => {
+      const attr = $(el).attr('data-slot-id');
+      return attr && attr.split(',').includes(slotId);
+    });
+
+    const allEls = els.length > 0 ? els : multiEls;
+
+    allEls.each((_, el) => {
+      const $el = $(el);
+
+      if (slot.type === 'text' || slot.type === 'richtext') {
+        if (slot.tag === 'img') {
+          $el.attr('alt', slot.value);
+        } else if (slot.tag === 'input') {
+          $el.attr('value', slot.value);
+        } else {
+          $el.html(slot.value);
+        }
+      } else if (slot.type === 'image') {
+        $el.attr('src', slot.value);
+      } else if (slot.type === 'link') {
+        $el.attr('href', slot.value);
+      }
+    });
   }
 
-  // Apply style overrides if present
+  // Apply style overrides
   if (styles && Object.keys(styles).length > 0) {
     for (const [slotId, overrides] of Object.entries(styles)) {
       if (!overrides || Object.keys(overrides).length === 0) continue;
       const inlineStyle = buildInlineStyle(overrides);
-      // Find elements with this slot ID and inject inline styles
-      const slotAttr = `data-slot-id="${slotId}"`;
-      const slotAttrComma = `data-slot-id="${slotId},`;
 
-      // Handle exact match
-      html = html.replace(
-        new RegExp(`(${escapeRegex(slotAttr)}[^>]*?)style="([^"]*)"`, 'g'),
-        `$1style="$2;${inlineStyle}"`
-      );
-      // Handle comma-separated (multi-slot)
-      html = html.replace(
-        new RegExp(`(${escapeRegex(slotAttrComma)}[^>]*?)style="([^"]*)"`, 'g'),
-        `$1style="$2;${inlineStyle}"`
-      );
+      const els = $(`[data-slot-id="${slotId}"]`);
+      const multiEls = $('[data-slot-id]').filter((_, el) => {
+        const attr = $(el).attr('data-slot-id');
+        return attr && attr.split(',').includes(slotId);
+      });
+      const allEls = els.length > 0 ? els : multiEls;
 
-      // If no existing style attribute, add one
-      if (!html.includes(`${slotAttr}`) || true) {
-        html = html.replace(
-          new RegExp(`(${escapeRegex(slotAttr)})(?![^>]*style=)`, 'g'),
-          `$1 style="${inlineStyle}"`
-        );
-      }
+      allEls.each((_, el) => {
+        const $el = $(el);
+        const existing = $el.attr('style') || '';
+        const separator = existing && !existing.endsWith(';') ? ';' : '';
+        $el.attr('style', existing + separator + inlineStyle);
+      });
     }
   }
 
-  return html;
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return $.html();
 }

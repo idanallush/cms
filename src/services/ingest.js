@@ -1,15 +1,18 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const TEXT_TAGS = new Set([
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'p', 'span', 'li', 'td', 'th', 'label'
+  'p', 'li', 'td', 'th', 'label',
 ]);
-
 const BUTTON_TAGS = new Set(['button']);
 const LINK_TAG = 'a';
 const IMAGE_TAG = 'img';
 const SUBMIT_SELECTOR = 'input[type="submit"]';
+
+const INLINE_TAGS = new Set(['span', 'strong', 'em', 'b', 'i', 'u', 'mark', 'small', 'sub', 'sup', 'a', 'br']);
+const BLOCK_TAGS = new Set(['div', 'section', 'article', 'aside', 'header', 'footer', 'nav', 'main', 'ul', 'ol', 'table', 'form', 'fieldset', 'figure', 'blockquote', 'pre', 'hr']);
 
 function generateSlotId(tagName, path, index) {
   const sanitized = path.replace(/[^a-z0-9]/gi, '_').slice(0, 60);
@@ -29,6 +32,25 @@ function buildElementPath(el, $) {
   return parts.join('>');
 }
 
+function hasChildBlockElements($el) {
+  return $el.children().toArray().some(child => {
+    const tag = child.tagName?.toLowerCase();
+    return tag && (BLOCK_TAGS.has(tag) || TEXT_TAGS.has(tag) || HEADING_TAGS.has(tag));
+  });
+}
+
+function hasOnlyInlineChildren($el) {
+  const children = $el.children().toArray();
+  return children.every(child => {
+    const tag = child.tagName?.toLowerCase();
+    return tag && INLINE_TAGS.has(tag);
+  });
+}
+
+function isAlreadyTagged($el) {
+  return $el.attr('data-slot-id') !== undefined;
+}
+
 export async function ingestHtml(rawHtml) {
   return parseHtml(rawHtml);
 }
@@ -45,55 +67,76 @@ export async function ingestUrl(url) {
 }
 
 function parseHtml(html) {
-  const $ = cheerio.load(html);
+  const $ = cheerio.load(html, { decodeEntities: false });
 
   const contentMap = {};
   let slotCounter = 0;
+  const taggedElements = new Set();
 
-  // Process text elements
+  function tagElement(el, $el, tag, slotType, value, extra) {
+    if (taggedElements.has(el)) return;
+    taggedElements.add(el);
+
+    const elPath = buildElementPath(el, $);
+    const slotId = generateSlotId(tag, elPath, slotCounter++);
+
+    $el.attr('data-slot-id', slotId);
+    $el.attr('data-slot-type', slotType);
+
+    contentMap[slotId] = {
+      type: slotType,
+      value,
+      tag,
+      path: elPath,
+      ...extra,
+    };
+
+    return slotId;
+  }
+
+  // Process text elements (h1-h6, p, li, td, th, label)
   TEXT_TAGS.forEach(tag => {
     $(tag).each((i, el) => {
       const $el = $(el);
+      if (isAlreadyTagged($el)) return;
+
       const text = $el.text().trim();
       if (!text) return;
 
-      // Skip if element contains child elements that are also text tags (avoid duplication)
-      if ($el.children().filter((_, child) => TEXT_TAGS.has(child.tagName)).length > 0) return;
+      const hasInline = $el.children().length > 0 && hasOnlyInlineChildren($el);
 
-      const elPath = buildElementPath(el, $);
-      const slotId = generateSlotId(tag, elPath, slotCounter++);
-
-      contentMap[slotId] = {
-        type: 'text',
-        value: text,
-        tag,
-        path: elPath,
-      };
-
-      $el.attr('data-slot-id', slotId);
-      $el.attr('data-slot-type', 'text');
-      $el.empty().text(`{{${slotId}}}`);
+      if (hasInline) {
+        const innerHTML = $el.html();
+        tagElement(el, $el, tag, 'richtext', innerHTML);
+      } else if ($el.children().filter((_, child) => TEXT_TAGS.has(child.tagName?.toLowerCase())).length > 0) {
+        return;
+      } else {
+        tagElement(el, $el, tag, 'text', text);
+      }
     });
   });
 
   // Process links
   $(LINK_TAG).each((i, el) => {
     const $el = $(el);
+    if (isAlreadyTagged($el)) return;
+
     const href = $el.attr('href');
     const text = $el.text().trim();
-    const elPath = buildElementPath(el, $);
+    if (!href && !text) return;
 
+    const elPath = buildElementPath(el, $);
     const slotIds = [];
 
     if (text) {
+      const hasInline = $el.children().length > 0 && hasOnlyInlineChildren($el);
       const textSlotId = generateSlotId('a_text', elPath, slotCounter++);
       contentMap[textSlotId] = {
-        type: 'text',
-        value: text,
+        type: hasInline ? 'richtext' : 'text',
+        value: hasInline ? $el.html() : text,
         tag: 'a',
         path: elPath,
       };
-      $el.empty().text(`{{${textSlotId}}}`);
       slotIds.push(textSlotId);
     }
 
@@ -105,92 +148,100 @@ function parseHtml(html) {
         tag: 'a',
         path: elPath,
       };
-      $el.attr('href', `{{${hrefSlotId}}}`);
       slotIds.push(hrefSlotId);
     }
 
     if (slotIds.length) {
       $el.attr('data-slot-id', slotIds.join(','));
       $el.attr('data-slot-type', 'link');
+      taggedElements.add(el);
     }
   });
 
   // Process images
   $(IMAGE_TAG).each((i, el) => {
     const $el = $(el);
+    if (isAlreadyTagged($el)) return;
+
     const src = $el.attr('src');
+    if (!src) return;
+
     const alt = $el.attr('alt') || '';
     const elPath = buildElementPath(el, $);
 
-    if (src) {
-      const srcSlotId = generateSlotId('img_src', elPath, slotCounter++);
-      contentMap[srcSlotId] = {
-        type: 'image',
-        value: src,
-        tag: 'img',
-        path: elPath,
-      };
-      $el.attr('src', `{{${srcSlotId}}}`);
+    const srcSlotId = generateSlotId('img_src', elPath, slotCounter++);
+    contentMap[srcSlotId] = {
+      type: 'image',
+      value: src,
+      tag: 'img',
+      path: elPath,
+    };
 
-      const altSlotId = generateSlotId('img_alt', elPath, slotCounter++);
-      contentMap[altSlotId] = {
-        type: 'text',
-        value: alt,
-        tag: 'img',
-        path: elPath,
-      };
-      $el.attr('alt', `{{${altSlotId}}}`);
+    const altSlotId = generateSlotId('img_alt', elPath, slotCounter++);
+    contentMap[altSlotId] = {
+      type: 'text',
+      value: alt,
+      tag: 'img',
+      path: elPath,
+    };
 
-      $el.attr('data-slot-id', [srcSlotId, altSlotId].join(','));
-      $el.attr('data-slot-type', 'image');
-    }
+    $el.attr('data-slot-id', [srcSlotId, altSlotId].join(','));
+    $el.attr('data-slot-type', 'image');
+    taggedElements.add(el);
   });
 
   // Process buttons
   BUTTON_TAGS.forEach(tag => {
     $(tag).each((i, el) => {
       const $el = $(el);
+      if (isAlreadyTagged($el)) return;
+
       const text = $el.text().trim();
       if (!text) return;
 
-      const elPath = buildElementPath(el, $);
-      const slotId = generateSlotId('button', elPath, slotCounter++);
-
-      contentMap[slotId] = {
-        type: 'text',
-        value: text,
-        tag: 'button',
-        path: elPath,
-      };
-
-      $el.attr('data-slot-id', slotId);
-      $el.attr('data-slot-type', 'text');
-      $el.empty().text(`{{${slotId}}}`);
+      const hasInline = $el.children().length > 0 && hasOnlyInlineChildren($el);
+      tagElement(el, $el, 'button', hasInline ? 'richtext' : 'text', hasInline ? $el.html() : text);
     });
   });
 
   // Process submit inputs
   $(SUBMIT_SELECTOR).each((i, el) => {
     const $el = $(el);
+    if (isAlreadyTagged($el)) return;
+
     const value = $el.attr('value') || '';
     if (!value) return;
 
-    const elPath = buildElementPath(el, $);
-    const slotId = generateSlotId('submit', elPath, slotCounter++);
+    tagElement(el, $el, 'submit', 'text', value);
+  });
 
-    contentMap[slotId] = {
-      type: 'text',
-      value,
-      tag: 'input',
-      path: elPath,
-    };
+  // Process span and div that contain only text (no child block elements)
+  $('span').each((i, el) => {
+    const $el = $(el);
+    if (isAlreadyTagged($el)) return;
+    if ($el.children().length > 0) return;
+    const text = $el.text().trim();
+    if (!text) return;
+    if ($el.closest('[data-slot-id]').length > 0) return;
 
-    $el.attr('data-slot-id', slotId);
-    $el.attr('data-slot-type', 'text');
-    $el.attr('value', `{{${slotId}}}`);
+    tagElement(el, $el, 'span', 'text', text);
+  });
+
+  $('div').each((i, el) => {
+    const $el = $(el);
+    if (isAlreadyTagged($el)) return;
+    if (hasChildBlockElements($el)) return;
+    if ($el.children().length > 0) return;
+    const text = $el.text().trim();
+    if (!text) return;
+    if ($el.closest('[data-slot-id]').length > 0) return;
+
+    tagElement(el, $el, 'div', 'text', text);
   });
 
   const frozenTemplate = $.html();
+
+  console.log(`Ingest complete: ${Object.keys(contentMap).length} editable slots found`);
 
   return { frozenTemplate, contentMap };
 }
