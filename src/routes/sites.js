@@ -19,6 +19,10 @@ router.post('/:siteId/rollback/:versionId', requireSiteAccess, asyncHandler(ctrl
 router.get('/:siteId/preview', requireSiteAccess, asyncHandler(ctrl.preview));
 router.get('/:siteId/render', requireSiteAccess, asyncHandler(ctrl.render));
 router.get('/:siteId/export', requireSiteAccess, asyncHandler(ctrl.exportSite));
+router.get('/:siteId/seo', requireSiteAccess, asyncHandler(ctrl.getSeo));
+router.put('/:siteId/seo', requireSiteAccess, asyncHandler(ctrl.saveSeo));
+router.get('/:siteId/styles', requireSiteAccess, asyncHandler(ctrl.getStyles));
+router.put('/:siteId/styles', requireSiteAccess, asyncHandler(ctrl.saveStyles));
 router.delete('/:siteId', requireOwner, asyncHandler(ctrl.deleteSite));
 router.put('/:siteId/settings', requireOwner, asyncHandler(ctrl.updateSettings));
 router.post('/:siteId/password', requireOwner, asyncHandler(ctrl.setClientPassword));

@@ -10,7 +10,7 @@
 
   const API = `/api/sites/${siteId}`;
 
-  // DOM refs
+  // ── DOM refs ──
   const iframe = document.getElementById('site-iframe');
   const siteName = document.getElementById('site-name');
   const siteUrl = document.getElementById('site-url');
@@ -19,6 +19,7 @@
   const btnHistory = document.getElementById('btn-history');
   const btnPublish = document.getElementById('btn-publish');
   const btnChat = document.getElementById('btn-chat');
+  const btnUndo = document.getElementById('btn-undo');
   const changesIndicator = document.getElementById('changes-indicator');
   const historyPanel = document.getElementById('history-panel');
   const historyList = document.getElementById('history-list');
@@ -37,28 +38,53 @@
   const publishStatusText = document.getElementById('publish-status-text');
   const publishLink = document.getElementById('publish-link');
 
-  // Image popover refs
-  const popoverImage = document.getElementById('popover-image');
-  const popoverImgSrc = document.getElementById('popover-img-src');
-  const popoverImgAlt = document.getElementById('popover-img-alt');
-  const popoverImgApply = document.getElementById('popover-img-apply');
-  const popoverImgCancel = document.getElementById('popover-img-cancel');
+  // Right panel refs
+  const editorEmpty = document.getElementById('editor-empty');
+  const editorProps = document.getElementById('editor-props');
+  const propElementInfo = document.getElementById('prop-element-info');
 
-  // Link popover refs
-  const popoverLink = document.getElementById('popover-link');
-  const popoverLinkText = document.getElementById('popover-link-text');
-  const popoverLinkHref = document.getElementById('popover-link-href');
-  const popoverLinkApply = document.getElementById('popover-link-apply');
-  const popoverLinkCancel = document.getElementById('popover-link-cancel');
+  // Content editing refs
+  const propTextSection = document.getElementById('prop-text-section');
+  const propImageSection = document.getElementById('prop-image-section');
+  const propLinkSection = document.getElementById('prop-link-section');
+  const propTextInput = document.getElementById('prop-text-input');
+  const propImgSrc = document.getElementById('prop-img-src');
+  const propImgAlt = document.getElementById('prop-img-alt');
+  const propLinkText = document.getElementById('prop-link-text');
+  const propLinkHref = document.getElementById('prop-link-href');
+  const propApply = document.getElementById('prop-apply');
 
+  // Style refs
+  const styleApply = document.getElementById('style-apply');
+  const styleReset = document.getElementById('style-reset');
+
+  // SEO refs
+  const seoTitle = document.getElementById('seo-title');
+  const seoDescription = document.getElementById('seo-description');
+  const seoOgImage = document.getElementById('seo-ogImage');
+  const seoCanonicalUrl = document.getElementById('seo-canonicalUrl');
+  const seoNoIndex = document.getElementById('seo-noIndex');
+  const seoSave = document.getElementById('seo-save');
+  const seoGpTitle = document.getElementById('seo-gp-title');
+  const seoGpUrl = document.getElementById('seo-gp-url');
+  const seoGpDesc = document.getElementById('seo-gp-desc');
+  const seoTitleCount = document.getElementById('seo-title-count');
+  const seoDescCount = document.getElementById('seo-desc-count');
+  const seoChecks = document.getElementById('seo-checks');
+
+  // ── State ──
   let contentMap = {};
+  let stylesMap = {};
+  let seoData = {};
   let pendingChanges = {};
-  let activePopoverTarget = null;
+  let pendingStyleChanges = {};
+  let undoStack = [];
+  let selectedSlot = null;
   let saving = false;
   let publishing = false;
+  let siteMeta = {};
 
   // ── Toast ──
-
   function showToast(message, type) {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
@@ -68,18 +94,20 @@
   }
 
   // ── Pending changes tracking ──
-
   function addPendingChange(slotId, oldValue, newValue) {
     if (oldValue === newValue) {
       delete pendingChanges[slotId];
     } else {
+      undoStack.push({ slotId, oldValue, newValue });
       pendingChanges[slotId] = { oldValue, newValue };
     }
     updateChangesUI();
   }
 
   function updateChangesUI() {
-    const count = Object.keys(pendingChanges).length;
+    const contentCount = Object.keys(pendingChanges).length;
+    const styleCount = Object.keys(pendingStyleChanges).length;
+    const count = contentCount + styleCount;
     if (count > 0) {
       changesIndicator.textContent = `${count} unsaved change${count > 1 ? 's' : ''}`;
       changesIndicator.classList.remove('hidden');
@@ -91,18 +119,60 @@
       saveBadge.classList.add('hidden');
       btnSave.disabled = true;
     }
+    btnUndo.disabled = undoStack.length === 0;
   }
 
-  // ── Unsaved changes warning ──
+  // ── Undo ──
+  btnUndo.addEventListener('click', () => {
+    const last = undoStack.pop();
+    if (!last) return;
 
+    const doc = iframe.contentDocument;
+    if (doc) {
+      const el = doc.querySelector(`[data-slot-id*="${last.slotId}"]`);
+      if (el) {
+        const slot = contentMap[last.slotId];
+        if (slot?.type === 'text') el.textContent = last.oldValue;
+        else if (slot?.type === 'image') el.src = last.oldValue;
+        else if (slot?.type === 'link') el.href = last.oldValue;
+      }
+    }
+    delete pendingChanges[last.slotId];
+    updateChangesUI();
+  });
+
+  // ── Unsaved changes warning ──
   window.addEventListener('beforeunload', (e) => {
-    if (Object.keys(pendingChanges).length > 0) {
+    if (Object.keys(pendingChanges).length > 0 || Object.keys(pendingStyleChanges).length > 0) {
       e.preventDefault();
     }
   });
 
-  // ── Responsive preview ──
+  // ── Panel tabs ──
+  document.querySelectorAll('.panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const panelId = `panel-${tab.dataset.panel}`;
+      document.getElementById(panelId).classList.add('active');
 
+      if (tab.dataset.panel === 'sections') buildSectionsList();
+      if (tab.dataset.panel === 'seo') loadSeo();
+    });
+  });
+
+  // ── Property tabs (Edit/Style) ──
+  document.querySelectorAll('.prop-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.prop-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.prop-tab-content').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`prop-${tab.dataset.propTab}`).classList.add('active');
+    });
+  });
+
+  // ── Responsive preview ──
   document.querySelectorAll('.resp-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.resp-btn').forEach(b => b.classList.remove('active'));
@@ -114,31 +184,35 @@
   });
 
   // ── Load site metadata ──
-
   async function loadMeta() {
     const res = await fetch(API);
-    const meta = await res.json();
-    siteName.textContent = meta.name || 'Untitled Site';
-    siteUrl.textContent = meta.originalUrl;
-    siteUrl.href = meta.originalUrl;
-    document.title = `Editor - ${meta.name}`;
+    siteMeta = await res.json();
+    siteName.textContent = siteMeta.name || 'Untitled Site';
+    siteUrl.textContent = siteMeta.originalUrl;
+    siteUrl.href = siteMeta.originalUrl;
+    document.title = `Editor - ${siteMeta.name}`;
   }
 
   // ── Load content map ──
-
   async function loadContent() {
     const res = await fetch(`${API}/content`);
     contentMap = await res.json();
   }
 
-  // ── Load iframe ──
+  // ── Load styles ──
+  async function loadStyles() {
+    try {
+      const res = await fetch(`${API}/styles`);
+      stylesMap = await res.json();
+    } catch { stylesMap = {}; }
+  }
 
+  // ── Load iframe ──
   function loadIframe() {
     iframe.src = `${API}/render`;
   }
 
   // ── Inject editor behavior into iframe ──
-
   function injectEditorScript() {
     const doc = iframe.contentDocument;
     if (!doc) return;
@@ -147,49 +221,52 @@
     style.textContent = `
       [data-slot-id] {
         cursor: pointer !important;
-        transition: outline 0.12s ease, outline-offset 0.12s ease;
+        transition: outline 0.12s ease, outline-offset 0.12s ease, box-shadow 0.12s ease;
         outline: 2px solid transparent;
         outline-offset: 2px;
       }
       [data-slot-id]:hover {
-        outline: 2px dashed #4a6cf7 !important;
+        outline: 2px dashed rgba(74, 108, 247, 0.5) !important;
+        box-shadow: inset 0 0 0 1px rgba(74, 108, 247, 0.1);
       }
-      [data-slot-id].slot-active {
+      [data-slot-id].slot-selected {
         outline: 2px solid #4a6cf7 !important;
-        background: rgba(74, 108, 247, 0.06);
+        outline-offset: 2px;
       }
-      .slot-tooltip {
+      .slot-label {
         position: absolute;
-        background: #111;
+        background: #4a6cf7;
         color: #fff;
-        font-size: 11px;
-        padding: 3px 8px;
-        border-radius: 4px;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 0 0 4px 0;
         pointer-events: none;
         z-index: 10000;
         font-family: -apple-system, sans-serif;
-        white-space: nowrap;
+        font-weight: 600;
+        letter-spacing: 0.3px;
       }
     `;
     doc.head.appendChild(style);
 
-    let tooltip = null;
+    let activeLabel = null;
 
-    function showTooltip(el, text) {
-      removeTooltip();
-      tooltip = doc.createElement('div');
-      tooltip.className = 'slot-tooltip';
-      tooltip.textContent = text;
-      doc.body.appendChild(tooltip);
+    function showLabel(el, text) {
+      removeLabel();
+      activeLabel = doc.createElement('div');
+      activeLabel.className = 'slot-label';
+      activeLabel.textContent = text;
       const rect = el.getBoundingClientRect();
-      tooltip.style.left = rect.left + 'px';
-      tooltip.style.top = (rect.top - 24) + 'px';
+      activeLabel.style.position = 'fixed';
+      activeLabel.style.left = rect.left + 'px';
+      activeLabel.style.top = (rect.top - 18) + 'px';
+      doc.body.appendChild(activeLabel);
     }
 
-    function removeTooltip() {
-      if (tooltip) {
-        tooltip.remove();
-        tooltip = null;
+    function removeLabel() {
+      if (activeLabel) {
+        activeLabel.remove();
+        activeLabel = null;
       }
     }
 
@@ -200,261 +277,490 @@
       const slotIds = el.getAttribute('data-slot-id').split(',');
 
       el.addEventListener('mouseenter', () => {
-        showTooltip(el, slotType);
+        if (!el.classList.contains('slot-selected')) {
+          showLabel(el, slotType);
+        }
       });
 
       el.addEventListener('mouseleave', () => {
-        removeTooltip();
+        if (!el.classList.contains('slot-selected')) {
+          removeLabel();
+        }
       });
 
       el.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        handleSlotClick(el, slotType, slotIds);
+        selectSlot(el, slotType, slotIds);
       });
+    });
+
+    // Click outside to deselect
+    doc.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-slot-id]')) {
+        deselectSlot();
+      }
     });
   }
 
-  // ── Slot click handlers ──
+  // ── Slot selection ──
+  function selectSlot(el, slotType, slotIds) {
+    const doc = iframe.contentDocument;
+    if (!doc) return;
 
-  function handleSlotClick(el, slotType, slotIds) {
-    closeAllPopovers();
+    // Deselect previous
+    doc.querySelectorAll('.slot-selected').forEach(s => s.classList.remove('slot-selected'));
+
+    el.classList.add('slot-selected');
+    selectedSlot = { el, slotType, slotIds };
+
+    // Switch to editor panel
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+    document.querySelector('.panel-tab[data-panel="editor"]').classList.add('active');
+    document.getElementById('panel-editor').classList.add('active');
+
+    // Show props, hide empty
+    editorEmpty.classList.add('hidden');
+    editorProps.classList.remove('hidden');
+
+    // Element info
+    const tag = el.tagName.toLowerCase();
+    const mainSlotId = slotIds[0];
+    propElementInfo.textContent = `<${tag}> - ${slotType} (${mainSlotId.slice(0, 8)}...)`;
+
+    // Reset sections
+    propTextSection.classList.add('hidden');
+    propImageSection.classList.add('hidden');
+    propLinkSection.classList.add('hidden');
+
+    // Populate based on type
+    if (slotType === 'text') {
+      propTextSection.classList.remove('hidden');
+      const slot = contentMap[mainSlotId];
+      propTextInput.value = slot?.value || el.textContent.trim();
+    } else if (slotType === 'image') {
+      propImageSection.classList.remove('hidden');
+      const srcSlotId = slotIds.find(id => contentMap[id]?.type === 'image');
+      const altSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
+      propImgSrc.value = srcSlotId ? contentMap[srcSlotId].value : '';
+      propImgAlt.value = altSlotId ? contentMap[altSlotId].value : '';
+    } else if (slotType === 'link') {
+      propLinkSection.classList.remove('hidden');
+      const textSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
+      const hrefSlotId = slotIds.find(id => contentMap[id]?.type === 'link');
+      propLinkText.value = textSlotId ? contentMap[textSlotId].value : el.textContent.trim();
+      propLinkHref.value = hrefSlotId ? contentMap[hrefSlotId].value : '';
+    }
+
+    // Load style values for this slot
+    loadSlotStyles(mainSlotId);
+  }
+
+  function deselectSlot() {
+    const doc = iframe.contentDocument;
+    if (doc) {
+      doc.querySelectorAll('.slot-selected').forEach(s => s.classList.remove('slot-selected'));
+    }
+    selectedSlot = null;
+    editorEmpty.classList.remove('hidden');
+    editorProps.classList.add('hidden');
+  }
+
+  // ── Style sliders ──
+  function loadSlotStyles(slotId) {
+    const overrides = stylesMap[slotId] || {};
+
+    setSliderValue('marginTop', overrides.marginTop || 0);
+    setSliderValue('marginBottom', overrides.marginBottom || 0);
+    setSliderValue('paddingTop', overrides.paddingTop || 0);
+    setSliderValue('paddingBottom', overrides.paddingBottom || 0);
+    setSliderValue('fontSize', overrides.fontSize || 16);
+    setSliderValue('letterSpacing', overrides.letterSpacing || 0);
+
+    const lhSlider = document.getElementById('style-lineHeight');
+    const lhVal = overrides.lineHeight || 1.5;
+    lhSlider.value = Math.round(lhVal * 100);
+    document.getElementById('val-lineHeight').textContent = lhVal;
+
+    // Text align
+    document.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
+    const alignVal = overrides.textAlign || 'left';
+    const alignBtn = document.querySelector(`.align-btn[data-align="${alignVal}"]`);
+    if (alignBtn) alignBtn.classList.add('active');
+
+    // Font weight
+    document.getElementById('style-fontWeight').value = overrides.fontWeight || '';
+  }
+
+  function setSliderValue(prop, value) {
+    const slider = document.getElementById(`style-${prop}`);
+    if (slider) {
+      slider.value = value;
+      const unit = (prop === 'lineHeight') ? '' : 'px';
+      document.getElementById(`val-${prop}`).textContent = value + unit;
+    }
+  }
+
+  // Slider change handlers
+  ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'fontSize', 'letterSpacing'].forEach(prop => {
+    const slider = document.getElementById(`style-${prop}`);
+    if (slider) {
+      slider.addEventListener('input', () => {
+        document.getElementById(`val-${prop}`).textContent = slider.value + 'px';
+        applyLiveStyle(prop, slider.value + 'px');
+      });
+    }
+  });
+
+  // Line height (special - stored as ratio, displayed as ratio)
+  const lhSlider = document.getElementById('style-lineHeight');
+  if (lhSlider) {
+    lhSlider.addEventListener('input', () => {
+      const val = (lhSlider.value / 100).toFixed(2);
+      document.getElementById('val-lineHeight').textContent = val;
+      applyLiveStyle('lineHeight', val);
+    });
+  }
+
+  // Text align buttons
+  document.querySelectorAll('.align-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyLiveStyle('textAlign', btn.dataset.align);
+    });
+  });
+
+  function applyLiveStyle(prop, value) {
+    if (!selectedSlot) return;
+    const el = selectedSlot.el;
+    const cssPropMap = {
+      marginTop: 'marginTop', marginBottom: 'marginBottom',
+      paddingTop: 'paddingTop', paddingBottom: 'paddingBottom',
+      fontSize: 'fontSize', lineHeight: 'lineHeight',
+      letterSpacing: 'letterSpacing', textAlign: 'textAlign',
+      fontWeight: 'fontWeight',
+    };
+    if (cssPropMap[prop]) {
+      el.style[cssPropMap[prop]] = value;
+    }
+  }
+
+  // ── Apply content changes ──
+  propApply.addEventListener('click', () => {
+    if (!selectedSlot) return;
+    const { el, slotType, slotIds } = selectedSlot;
 
     if (slotType === 'text') {
-      startTextEdit(el, slotIds[0]);
+      const mainSlotId = slotIds[0];
+      const oldVal = contentMap[mainSlotId]?.value || '';
+      const newVal = propTextInput.value.trim();
+      if (newVal !== oldVal) {
+        el.textContent = newVal;
+        addPendingChange(mainSlotId, oldVal, newVal);
+      }
     } else if (slotType === 'image') {
-      startImageEdit(el, slotIds);
+      const srcSlotId = slotIds.find(id => contentMap[id]?.type === 'image');
+      const altSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
+      if (srcSlotId) {
+        const oldVal = contentMap[srcSlotId].value;
+        const newVal = propImgSrc.value.trim();
+        if (newVal && newVal !== oldVal) {
+          el.src = newVal;
+          addPendingChange(srcSlotId, oldVal, newVal);
+        }
+      }
+      if (altSlotId) {
+        const oldVal = contentMap[altSlotId].value;
+        const newVal = propImgAlt.value.trim();
+        if (newVal !== oldVal) {
+          el.alt = newVal;
+          addPendingChange(altSlotId, oldVal, newVal);
+        }
+      }
     } else if (slotType === 'link') {
-      startLinkEdit(el, slotIds);
-    }
-  }
-
-  // ── Text editing ──
-
-  function startTextEdit(el, slotId) {
-    const slot = contentMap[slotId];
-    if (!slot) return;
-
-    el.classList.add('slot-active');
-    el.setAttribute('contenteditable', 'true');
-    el.focus();
-
-    const originalValue = slot.value;
-
-    function finishEdit() {
-      el.removeAttribute('contenteditable');
-      el.classList.remove('slot-active');
-      const newValue = el.textContent.trim();
-      if (newValue !== originalValue) {
-        addPendingChange(slotId, originalValue, newValue);
+      const textSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
+      const hrefSlotId = slotIds.find(id => contentMap[id]?.type === 'link');
+      if (textSlotId) {
+        const oldVal = contentMap[textSlotId].value;
+        const newVal = propLinkText.value.trim();
+        if (newVal && newVal !== oldVal) {
+          el.textContent = newVal;
+          addPendingChange(textSlotId, oldVal, newVal);
+        }
       }
-      el.removeEventListener('blur', finishEdit);
-      el.removeEventListener('keydown', handleKey);
-    }
-
-    function handleKey(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        finishEdit();
-      }
-      if (e.key === 'Escape') {
-        el.textContent = originalValue;
-        finishEdit();
+      if (hrefSlotId) {
+        const oldVal = contentMap[hrefSlotId].value;
+        const newVal = propLinkHref.value.trim();
+        if (newVal !== oldVal) {
+          el.href = newVal;
+          addPendingChange(hrefSlotId, oldVal, newVal);
+        }
       }
     }
 
-    el.addEventListener('blur', finishEdit);
-    el.addEventListener('keydown', handleKey);
-  }
-
-  // ── Image editing ──
-
-  function startImageEdit(el, slotIds) {
-    const srcSlotId = slotIds.find(id => contentMap[id]?.type === 'image');
-    const altSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
-
-    popoverImgSrc.value = srcSlotId ? contentMap[srcSlotId].value : '';
-    popoverImgAlt.value = altSlotId ? contentMap[altSlotId].value : '';
-
-    activePopoverTarget = { el, srcSlotId, altSlotId };
-    positionPopover(popoverImage, el);
-    popoverImage.classList.remove('hidden');
-  }
-
-  popoverImgApply.addEventListener('click', () => {
-    if (!activePopoverTarget) return;
-    const { el, srcSlotId, altSlotId } = activePopoverTarget;
-    const newSrc = popoverImgSrc.value.trim();
-    const newAlt = popoverImgAlt.value.trim();
-
-    if (srcSlotId && newSrc) {
-      const oldVal = contentMap[srcSlotId].value;
-      el.src = newSrc;
-      addPendingChange(srcSlotId, oldVal, newSrc);
-    }
-    if (altSlotId) {
-      const oldVal = contentMap[altSlotId].value;
-      el.alt = newAlt;
-      addPendingChange(altSlotId, oldVal, newAlt);
-    }
-
-    closeAllPopovers();
+    showToast('Change applied. Save to keep.', 'info');
   });
 
-  popoverImgCancel.addEventListener('click', closeAllPopovers);
+  // ── Apply style changes ──
+  styleApply.addEventListener('click', () => {
+    if (!selectedSlot) return;
+    const mainSlotId = selectedSlot.slotIds[0];
 
-  // ── Link editing ──
+    const overrides = {};
 
-  function startLinkEdit(el, slotIds) {
-    const textSlotId = slotIds.find(id => contentMap[id]?.type === 'text');
-    const hrefSlotId = slotIds.find(id => contentMap[id]?.type === 'link');
+    const mt = parseInt(document.getElementById('style-marginTop').value);
+    if (mt !== 0) overrides.marginTop = mt;
 
-    popoverLinkText.value = textSlotId ? contentMap[textSlotId].value : el.textContent.trim();
-    popoverLinkHref.value = hrefSlotId ? contentMap[hrefSlotId].value : '';
+    const mb = parseInt(document.getElementById('style-marginBottom').value);
+    if (mb !== 0) overrides.marginBottom = mb;
 
-    activePopoverTarget = { el, textSlotId, hrefSlotId };
-    positionPopover(popoverLink, el);
-    popoverLink.classList.remove('hidden');
-  }
+    const pt = parseInt(document.getElementById('style-paddingTop').value);
+    if (pt !== 0) overrides.paddingTop = pt;
 
-  popoverLinkApply.addEventListener('click', () => {
-    if (!activePopoverTarget) return;
-    const { el, textSlotId, hrefSlotId } = activePopoverTarget;
-    const newText = popoverLinkText.value.trim();
-    const newHref = popoverLinkHref.value.trim();
+    const pb = parseInt(document.getElementById('style-paddingBottom').value);
+    if (pb !== 0) overrides.paddingBottom = pb;
 
-    if (textSlotId && newText) {
-      const oldVal = contentMap[textSlotId].value;
-      el.textContent = newText;
-      addPendingChange(textSlotId, oldVal, newText);
+    const fs = parseInt(document.getElementById('style-fontSize').value);
+    if (fs !== 16) overrides.fontSize = fs;
+
+    const lh = parseFloat((document.getElementById('style-lineHeight').value / 100).toFixed(2));
+    if (lh !== 1.5) overrides.lineHeight = lh;
+
+    const ls = parseInt(document.getElementById('style-letterSpacing').value);
+    if (ls !== 0) overrides.letterSpacing = ls;
+
+    const activeAlign = document.querySelector('.align-btn.active');
+    if (activeAlign && activeAlign.dataset.align !== 'left') {
+      overrides.textAlign = activeAlign.dataset.align;
     }
-    if (hrefSlotId) {
-      const oldVal = contentMap[hrefSlotId].value;
-      el.href = newHref;
-      addPendingChange(hrefSlotId, oldVal, newHref);
+
+    const fw = document.getElementById('style-fontWeight').value;
+    if (fw) overrides.fontWeight = fw;
+
+    if (Object.keys(overrides).length > 0) {
+      pendingStyleChanges[mainSlotId] = overrides;
+    } else {
+      delete pendingStyleChanges[mainSlotId];
     }
 
-    closeAllPopovers();
+    updateChangesUI();
+    showToast('Style applied. Save to keep.', 'info');
   });
 
-  popoverLinkCancel.addEventListener('click', closeAllPopovers);
+  styleReset.addEventListener('click', () => {
+    if (!selectedSlot) return;
+    const mainSlotId = selectedSlot.slotIds[0];
+    delete pendingStyleChanges[mainSlotId];
+    delete stylesMap[mainSlotId];
 
-  // ── Popover positioning ──
+    // Reset visual
+    const el = selectedSlot.el;
+    el.style.cssText = '';
 
-  function positionPopover(popover, targetEl) {
-    const iframeRect = iframe.getBoundingClientRect();
-    const elRect = targetEl.getBoundingClientRect();
+    loadSlotStyles(mainSlotId);
+    updateChangesUI();
+    showToast('Styles reset', 'info');
+  });
 
-    let top = iframeRect.top + elRect.bottom + 8;
-    let left = iframeRect.left + elRect.left;
-
-    if (top + 250 > window.innerHeight) {
-      top = iframeRect.top + elRect.top - 250;
+  // ── Sections panel ──
+  function buildSectionsList() {
+    const doc = iframe.contentDocument;
+    const list = document.getElementById('sections-list');
+    if (!doc) {
+      list.innerHTML = '<p class="panel-empty">No sections found</p>';
+      return;
     }
-    if (left + 300 > window.innerWidth) {
-      left = window.innerWidth - 316;
+
+    const sections = [];
+    const sectionTags = ['header', 'nav', 'main', 'section', 'article', 'aside', 'footer'];
+    sectionTags.forEach(tag => {
+      doc.querySelectorAll(tag).forEach((el, i) => {
+        const heading = el.querySelector('h1, h2, h3');
+        const text = heading ? heading.textContent.trim().slice(0, 40) : el.textContent.trim().slice(0, 40);
+        sections.push({ tag, index: i, text, el });
+      });
+    });
+
+    // Also add major headings
+    doc.querySelectorAll('h1, h2').forEach((el, i) => {
+      if (!el.closest('header, nav, footer')) {
+        sections.push({ tag: el.tagName.toLowerCase(), index: i, text: el.textContent.trim().slice(0, 40), el });
+      }
+    });
+
+    if (sections.length === 0) {
+      list.innerHTML = '<p class="panel-empty">No semantic sections found</p>';
+      return;
     }
 
-    popover.style.top = top + 'px';
-    popover.style.left = Math.max(8, left) + 'px';
+    list.innerHTML = '';
+    sections.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'section-item';
+      item.innerHTML = `
+        <div class="section-item-tag">${s.tag}${s.index > 0 ? ` #${s.index + 1}` : ''}</div>
+        <div class="section-item-text">${s.text || '(empty)'}</div>
+      `;
+      item.addEventListener('click', () => {
+        s.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.querySelectorAll('.section-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+      });
+      list.appendChild(item);
+    });
   }
 
-  function closeAllPopovers() {
-    popoverImage.classList.add('hidden');
-    popoverLink.classList.add('hidden');
-    activePopoverTarget = null;
+  // ── SEO panel ──
+  async function loadSeo() {
+    try {
+      const res = await fetch(`${API}/seo`);
+      seoData = await res.json();
+    } catch { seoData = {}; }
+
+    seoTitle.value = seoData.title || siteMeta.name || '';
+    seoDescription.value = seoData.description || '';
+    seoOgImage.value = seoData.ogImage || '';
+    seoCanonicalUrl.value = seoData.canonicalUrl || '';
+    seoNoIndex.checked = !!seoData.noIndex;
+
+    updateSeoPreview();
+    updateSeoChecklist();
   }
 
-  document.addEventListener('click', (e) => {
-    if (!popoverImage.classList.contains('hidden') &&
-        !popoverImage.contains(e.target)) {
-      closeAllPopovers();
-    }
-    if (!popoverLink.classList.contains('hidden') &&
-        !popoverLink.contains(e.target)) {
-      closeAllPopovers();
+  function updateSeoPreview() {
+    seoGpTitle.textContent = seoTitle.value || siteMeta.name || 'Page Title';
+    seoGpUrl.textContent = seoCanonicalUrl.value || siteMeta.publishUrl || siteMeta.originalUrl || 'example.com';
+    seoGpDesc.textContent = seoDescription.value || 'No description set...';
+    seoTitleCount.textContent = seoTitle.value.length;
+    seoDescCount.textContent = seoDescription.value.length;
+  }
+
+  function updateSeoChecklist() {
+    const checks = [
+      { label: 'Title present', pass: !!seoTitle.value },
+      { label: 'Title under 60 chars', pass: seoTitle.value.length > 0 && seoTitle.value.length <= 60 },
+      { label: 'Description present', pass: !!seoDescription.value },
+      { label: 'Description under 160 chars', pass: seoDescription.value.length > 0 && seoDescription.value.length <= 160 },
+      { label: 'OG image set', pass: !!seoOgImage.value },
+      { label: 'Not marked noindex', pass: !seoNoIndex.checked },
+    ];
+
+    seoChecks.innerHTML = checks.map(c => `
+      <div class="seo-check-item ${c.pass ? 'seo-check-pass' : 'seo-check-fail'}">
+        <span class="seo-check-icon">${c.pass ? '&#10003;' : '&#10007;'}</span>
+        <span>${c.label}</span>
+      </div>
+    `).join('');
+  }
+
+  // Live preview updates
+  seoTitle.addEventListener('input', () => { updateSeoPreview(); updateSeoChecklist(); });
+  seoDescription.addEventListener('input', () => { updateSeoPreview(); updateSeoChecklist(); });
+  seoOgImage.addEventListener('input', updateSeoPreview);
+  seoCanonicalUrl.addEventListener('input', updateSeoPreview);
+  seoNoIndex.addEventListener('change', updateSeoChecklist);
+
+  seoSave.addEventListener('click', async () => {
+    seoSave.textContent = 'Saving...';
+    seoSave.disabled = true;
+    try {
+      const res = await fetch(`${API}/seo`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: seoTitle.value,
+          description: seoDescription.value,
+          ogImage: seoOgImage.value,
+          canonicalUrl: seoCanonicalUrl.value,
+          noIndex: seoNoIndex.checked,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('SEO saved', 'success');
+      } else {
+        showToast(data.error?.message || 'Save failed', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to save SEO', 'error');
+    } finally {
+      seoSave.textContent = 'Save SEO';
+      seoSave.disabled = false;
     }
   });
 
   // ── Save ──
-
   btnSave.addEventListener('click', async () => {
-    if (saving || Object.keys(pendingChanges).length === 0) return;
+    if (saving) return;
+    const hasContent = Object.keys(pendingChanges).length > 0;
+    const hasStyles = Object.keys(pendingStyleChanges).length > 0;
+    if (!hasContent && !hasStyles) return;
+
     saving = true;
     btnSave.textContent = 'Saving...';
 
-    const changes = {};
-    for (const [slotId, { newValue }] of Object.entries(pendingChanges)) {
-      changes[slotId] = newValue;
-    }
-
     try {
-      const res = await fetch(`${API}/content`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes),
-      });
-      const data = await res.json();
-
-      if (data.valid) {
-        for (const slotId of Object.keys(pendingChanges)) {
-          if (contentMap[slotId]) {
-            contentMap[slotId].value = pendingChanges[slotId].newValue;
-          }
+      // Save content changes
+      if (hasContent) {
+        const changes = {};
+        for (const [slotId, { newValue }] of Object.entries(pendingChanges)) {
+          changes[slotId] = newValue;
         }
-        pendingChanges = {};
-        updateChangesUI();
-        showToast('Changes saved', 'success');
-      } else {
-        showToast(data.errors.join('; '), 'error');
-        revertRejectedSlots(data.errors);
+        const res = await fetch(`${API}/content`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changes),
+        });
+        const data = await res.json();
+        if (data.valid) {
+          for (const slotId of Object.keys(pendingChanges)) {
+            if (contentMap[slotId]) {
+              contentMap[slotId].value = pendingChanges[slotId].newValue;
+            }
+          }
+          pendingChanges = {};
+        } else {
+          showToast(data.errors.join('; '), 'error');
+          saving = false;
+          btnSave.textContent = 'Save';
+          return;
+        }
       }
+
+      // Save style changes
+      if (hasStyles) {
+        const res = await fetch(`${API}/styles`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pendingStyleChanges),
+        });
+        const data = await res.json();
+        if (data.valid) {
+          stylesMap = data.styles;
+          pendingStyleChanges = {};
+        } else {
+          showToast(data.errors.join('; '), 'error');
+        }
+      }
+
+      undoStack = [];
+      updateChangesUI();
+      showToast('Changes saved', 'success');
     } catch (err) {
       showToast('Failed to save: ' + err.message, 'error');
     } finally {
       saving = false;
       btnSave.textContent = 'Save';
-      const count = Object.keys(pendingChanges).length;
-      if (count > 0) {
-        saveBadge.textContent = count;
-        saveBadge.classList.remove('hidden');
-      }
     }
   });
 
-  function revertRejectedSlots(errors) {
-    const doc = iframe.contentDocument;
-    if (!doc) return;
-
-    for (const err of errors) {
-      const match = err.match(/Slot "([^"]+)"/);
-      if (!match) continue;
-      const slotId = match[1];
-      const change = pendingChanges[slotId];
-      if (!change) continue;
-
-      const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
-      if (!el) continue;
-
-      const slot = contentMap[slotId];
-      if (slot?.type === 'text') {
-        el.textContent = change.oldValue;
-      } else if (slot?.type === 'image') {
-        el.src = change.oldValue;
-      } else if (slot?.type === 'link') {
-        el.href = change.oldValue;
-      }
-      delete pendingChanges[slotId];
-    }
-    updateChangesUI();
-  }
-
   // ── Publish ──
-
   btnPublish.addEventListener('click', async () => {
     if (publishing) return;
 
-    if (Object.keys(pendingChanges).length > 0) {
+    if (Object.keys(pendingChanges).length > 0 || Object.keys(pendingStyleChanges).length > 0) {
       if (!confirm('You have unsaved changes. Save first before publishing?')) return;
       btnSave.click();
       return;
@@ -469,7 +775,7 @@
       const data = await res.json();
 
       if (res.ok && data.success) {
-        showToast('Site published successfully!', 'success');
+        showToast('Site published!', 'success');
         showPublishBar(data.url);
       } else {
         showToast(data.error?.message || 'Publish failed', 'error');
@@ -502,7 +808,6 @@
   }
 
   // ── AI Chat ──
-
   btnChat.addEventListener('click', () => {
     chatPanel.classList.toggle('hidden');
     if (!chatPanel.classList.contains('hidden')) {
@@ -587,7 +892,6 @@
   });
 
   // ── History ──
-
   btnHistory.addEventListener('click', () => {
     historyPanel.classList.toggle('hidden');
     if (!historyPanel.classList.contains('hidden')) {
@@ -600,13 +904,13 @@
   });
 
   async function loadVersions() {
-    historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:13px;">Loading...</p>';
+    historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:12px;">Loading...</p>';
     try {
       const res = await fetch(`${API}/versions`);
       const { versions } = await res.json();
 
       if (versions.length === 0) {
-        historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:13px;">No versions yet</p>';
+        historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:12px;">No versions yet</p>';
         return;
       }
 
@@ -614,7 +918,6 @@
       versions.forEach((v, i) => {
         const item = document.createElement('div');
         item.className = 'history-item';
-
         const timeDisplay = formatDate(v);
 
         item.innerHTML = `
@@ -640,6 +943,8 @@
           try {
             await fetch(`${API}/rollback/${versionId}`, { method: 'POST' });
             pendingChanges = {};
+            pendingStyleChanges = {};
+            undoStack = [];
             updateChangesUI();
             await loadContent();
             loadIframe();
@@ -651,7 +956,7 @@
         });
       });
     } catch {
-      historyList.innerHTML = '<p style="color:#ef4444;padding:12px;font-size:13px;">Failed to load versions</p>';
+      historyList.innerHTML = '<p style="color:#ef4444;padding:12px;font-size:12px;">Failed to load versions</p>';
     }
   }
 
@@ -673,26 +978,25 @@
   }
 
   // ── Onboarding ──
-
   const onboardingSteps = [
     {
       title: 'Click anything to edit',
-      desc: 'Hover any text, button or image — then click it and just type. Changes preview instantly.',
+      desc: 'Click any element in the preview. Its properties appear in the right panel where you can edit content and adjust styles.',
       target: '#site-iframe',
     },
     {
-      title: 'Check every screen',
-      desc: 'Preview your site on desktop, tablet and mobile before you publish.',
+      title: 'Preview every screen',
+      desc: 'Switch between desktop, tablet and mobile to see how your site looks on different devices.',
       target: '#responsive-btns',
     },
     {
-      title: 'Or just ask',
-      desc: 'Describe what you want changed in plain English. The AI does it, the Guardian checks it.',
+      title: 'Or just ask AI',
+      desc: 'Describe what you want changed in plain English. The AI does it, the Guardian validates it.',
       target: '#btn-chat',
     },
     {
       title: 'Save, then Publish',
-      desc: 'Save keeps your edits as a draft. Publish pushes it live. Made a mistake? Roll back any version anytime.',
+      desc: 'Save keeps your edits as a draft. Publish pushes it live. Made a mistake? Roll back any version.',
       target: '#btn-save',
     },
   ];
@@ -720,12 +1024,11 @@
         `<span class="ob-dot ${i === step ? 'active' : ''}"></span>`
       ).join('');
 
-      // Position tooltip near target
       const target = document.querySelector(s.target);
       if (target) {
         const rect = target.getBoundingClientRect();
         tooltip.style.top = (rect.bottom + 12) + 'px';
-        tooltip.style.left = Math.max(16, Math.min(rect.left, window.innerWidth - 320)) + 'px';
+        tooltip.style.left = Math.max(16, Math.min(rect.left, window.innerWidth - 300)) + 'px';
       }
     }
 
@@ -750,19 +1053,16 @@
   }
 
   // ── Iframe load handler ──
-
   iframe.addEventListener('load', () => {
     injectEditorScript();
-    // Show onboarding after first load
     setTimeout(showOnboarding, 500);
   });
 
   // ── Init ──
-
   async function init() {
     try {
       await loadMeta();
-      await loadContent();
+      await Promise.all([loadContent(), loadStyles()]);
       loadIframe();
       loadPublishStatus();
     } catch (err) {

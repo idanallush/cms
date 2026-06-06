@@ -23,6 +23,7 @@ const methods = [
   'saveContent', 'getContent', 'listVersions', 'getVersion',
   'siteExists', 'listAllSites', 'deleteSite', 'updateMeta',
   'getSetting', 'setSetting', 'getAllSettings',
+  'saveSeo', 'getSeo', 'saveStyles', 'getStyles',
 ];
 
 const proxyStore = {};
@@ -39,4 +40,5 @@ export const {
   saveContent, getContent, listVersions, getVersion,
   siteExists, listAllSites, deleteSite, updateMeta,
   getSetting, setSetting, getAllSettings,
+  saveSeo, getSeo, saveStyles, getStyles,
 } = proxyStore;

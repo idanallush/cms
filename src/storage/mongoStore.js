@@ -23,6 +23,8 @@ const siteSchema = new Schema({
   vercelProjectId: { type: String, default: null },
   vercelProjectName: { type: String, default: null },
   vercelDeploymentId: { type: String, default: null },
+  seo: { type: Schema.Types.Mixed, default: {} },
+  styles: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
 
 const settingsSchema = new Schema({
@@ -93,6 +95,8 @@ export async function getMeta(siteId) {
     vercelProjectId: site.vercelProjectId,
     vercelProjectName: site.vercelProjectName,
     vercelDeploymentId: site.vercelDeploymentId,
+    seo: site.seo || {},
+    styles: site.styles || {},
   };
 }
 
@@ -186,6 +190,8 @@ export async function listAllSites() {
       vercelProjectId: site.vercelProjectId,
       vercelProjectName: site.vercelProjectName,
       vercelDeploymentId: site.vercelDeploymentId,
+      seo: site.seo || {},
+      styles: site.styles || {},
       versionCount,
     });
   }
@@ -224,7 +230,27 @@ export async function updateMeta(siteId, updates) {
     vercelProjectId: site.vercelProjectId,
     vercelProjectName: site.vercelProjectName,
     vercelDeploymentId: site.vercelDeploymentId,
+    seo: site.seo || {},
+    styles: site.styles || {},
   };
+}
+
+export async function saveSeo(siteId, seo) {
+  await Site.updateOne({ siteId }, { $set: { seo } });
+}
+
+export async function getSeo(siteId) {
+  const site = await Site.findOne({ siteId }, { seo: 1 }).lean();
+  return site?.seo || {};
+}
+
+export async function saveStyles(siteId, styles) {
+  await Site.updateOne({ siteId }, { $set: { styles } });
+}
+
+export async function getStyles(siteId) {
+  const site = await Site.findOne({ siteId }, { styles: 1 }).lean();
+  return site?.styles || {};
 }
 
 // ── Settings API ──

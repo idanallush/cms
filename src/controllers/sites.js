@@ -139,7 +139,8 @@ export async function preview(req, res) {
 
   const template = await store.getTemplate(siteId);
   const content = await store.getContent(siteId);
-  const html = renderTemplate(template, content);
+  const styles = await store.getStyles(siteId);
+  const html = renderTemplate(template, content, styles);
 
   res.type('html').send(html);
 }
@@ -152,7 +153,8 @@ export async function render(req, res) {
 
   const template = await store.getTemplate(siteId);
   const content = await store.getContent(siteId);
-  const html = renderTemplate(template, content);
+  const styles = await store.getStyles(siteId);
+  const html = renderTemplate(template, content, styles);
 
   res.type('html').send(html);
 }
@@ -199,7 +201,8 @@ export async function exportSite(req, res) {
     return res.status(404).json({ error: { message: 'Site has no content' } });
   }
 
-  const html = generatePublishHtml(template, content, meta);
+  const styles = await store.getStyles(siteId);
+  const html = generatePublishHtml(template, content, meta, styles);
   const filename = (meta.name || 'site').replace(/[^a-z0-9]/gi, '-').toLowerCase();
 
   res.setHeader('Content-Type', 'text/html');
@@ -259,6 +262,75 @@ export async function updateSettings(req, res) {
 
   const updated = await store.updateMeta(siteId, updates);
   res.json(updated);
+}
+
+// ── SEO ──
+
+export async function getSeo(req, res) {
+  const { siteId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const seo = await store.getSeo(siteId);
+  res.json(seo);
+}
+
+export async function saveSeo(req, res) {
+  const { siteId } = req.params;
+  const { title, description, ogImage, canonicalUrl, noIndex } = req.body;
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const seo = {};
+  if (title !== undefined) seo.title = String(title).slice(0, 120);
+  if (description !== undefined) seo.description = String(description).slice(0, 320);
+  if (ogImage !== undefined) seo.ogImage = String(ogImage);
+  if (canonicalUrl !== undefined) seo.canonicalUrl = String(canonicalUrl);
+  if (noIndex !== undefined) seo.noIndex = !!noIndex;
+
+  await store.saveSeo(siteId, seo);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+  res.json({ success: true, seo });
+}
+
+// ── Styles ──
+
+export async function getStyles(req, res) {
+  const { siteId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const styles = await store.getStyles(siteId);
+  res.json(styles);
+}
+
+export async function saveStyles(req, res) {
+  const { siteId } = req.params;
+  const styles = req.body;
+
+  if (!styles || typeof styles !== 'object' || Array.isArray(styles)) {
+    return res.status(400).json({ error: { message: 'Body must be an object of {slotId: styleOverrides}' } });
+  }
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  // Validate style overrides via guardian
+  const { validateStyleOverrides } = await import('../services/guardian.js');
+  const result = validateStyleOverrides(styles);
+  if (!result.valid) {
+    return res.status(422).json({ valid: false, errors: result.errors });
+  }
+
+  // Merge with existing styles
+  const existing = await store.getStyles(siteId);
+  const merged = { ...existing, ...result.sanitizedStyles };
+  await store.saveStyles(siteId, merged);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+  res.json({ valid: true, styles: merged });
 }
 
 export async function saveGlobalSettings(req, res) {

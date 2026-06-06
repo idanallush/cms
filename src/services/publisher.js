@@ -13,8 +13,8 @@ async function getVercelConfig() {
 /**
  * Generate clean HTML for publishing (no editor attributes)
  */
-export function generatePublishHtml(frozenTemplate, contentMap, meta) {
-  let html = renderTemplate(frozenTemplate, contentMap);
+export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
+  let html = renderTemplate(frozenTemplate, contentMap, styles);
 
   // Remove editor-specific attributes
   html = html.replace(/\s*data-slot-id="[^"]*"/g, '');
@@ -35,10 +35,29 @@ export function generatePublishHtml(frozenTemplate, contentMap, meta) {
 
 function buildSeoBlock(meta) {
   const tags = [];
+  const seo = meta.seo || {};
 
-  if (meta.name) {
-    // Only inject if no existing <title>
-    tags.push(`<meta property="og:title" content="${escapeAttr(meta.name)}">`);
+  const seoTitle = seo.title || meta.name;
+  if (seoTitle) {
+    tags.push(`<title>${escapeAttr(seoTitle)}</title>`);
+    tags.push(`<meta property="og:title" content="${escapeAttr(seoTitle)}">`);
+  }
+
+  if (seo.description) {
+    tags.push(`<meta name="description" content="${escapeAttr(seo.description)}">`);
+    tags.push(`<meta property="og:description" content="${escapeAttr(seo.description)}">`);
+  }
+
+  if (seo.ogImage) {
+    tags.push(`<meta property="og:image" content="${escapeAttr(seo.ogImage)}">`);
+  }
+
+  if (seo.canonicalUrl) {
+    tags.push(`<link rel="canonical" href="${escapeAttr(seo.canonicalUrl)}">`);
+  }
+
+  if (seo.noIndex) {
+    tags.push(`<meta name="robots" content="noindex, nofollow">`);
   }
 
   if (meta.originalUrl) {
@@ -70,7 +89,8 @@ export async function publishToVercel(siteId) {
   const content = await store.getContent(siteId);
   if (!template || !content) throw new Error('Site has no content');
 
-  const html = generatePublishHtml(template, content, meta);
+  const styles = await store.getStyles(siteId);
+  const html = generatePublishHtml(template, content, meta, styles);
 
   // Project name: sanitized site name
   const projectName = `cms-${siteId.slice(0, 8)}`;

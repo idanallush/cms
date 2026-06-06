@@ -9,18 +9,20 @@
 <body>
   <div id="toolbar">
     <div class="toolbar-left">
+      <a href="/dashboard" class="toolbar-back" title="Back to dashboard">&larr;</a>
       <span id="site-name" class="toolbar-site-name">Loading...</span>
       <a id="site-url" class="toolbar-site-url" href="#" target="_blank" rel="noopener"></a>
     </div>
     <div class="toolbar-center">
-      <span id="changes-indicator" class="changes-indicator hidden">0 unsaved changes</span>
-    </div>
-    <div class="toolbar-right">
       <div class="responsive-btns" id="responsive-btns">
         <button class="resp-btn active" data-width="100%" title="Desktop">&#128421;</button>
         <button class="resp-btn" data-width="768px" title="Tablet">&#128241;</button>
         <button class="resp-btn" data-width="375px" title="Mobile">&#128242;</button>
       </div>
+      <span id="changes-indicator" class="changes-indicator hidden">0 unsaved changes</span>
+    </div>
+    <div class="toolbar-right">
+      <button id="btn-undo" class="toolbar-btn btn-secondary" disabled title="Undo">&#8617;</button>
       <button id="btn-chat" class="toolbar-btn btn-ai" title="AI Chat">AI</button>
       <button id="btn-save" class="toolbar-btn btn-primary" disabled>
         Save
@@ -32,8 +34,199 @@
   </div>
 
   <div id="editor-body">
-    <iframe id="site-iframe" sandbox="allow-same-origin"></iframe>
+    <!-- Preview area (left 75%) -->
+    <div id="preview-area">
+      <iframe id="site-iframe" sandbox="allow-same-origin"></iframe>
+    </div>
 
+    <!-- Right panel (25%) -->
+    <div id="right-panel">
+      <div class="panel-tabs">
+        <button class="panel-tab active" data-panel="editor">Editor</button>
+        <button class="panel-tab" data-panel="sections">Sections</button>
+        <button class="panel-tab" data-panel="seo">SEO</button>
+        <button class="panel-tab" data-panel="inbox">Inbox</button>
+      </div>
+
+      <!-- Editor Panel -->
+      <div id="panel-editor" class="panel-content active">
+        <div id="editor-empty" class="panel-empty">
+          <p>Click an element in the preview to edit it</p>
+        </div>
+        <div id="editor-props" class="hidden">
+          <div class="prop-section">
+            <div class="prop-section-title">Element</div>
+            <div id="prop-element-info" class="prop-element-info"></div>
+          </div>
+
+          <!-- Content tab / Style tab -->
+          <div class="prop-tabs">
+            <button class="prop-tab active" data-prop-tab="content">Edit</button>
+            <button class="prop-tab" data-prop-tab="style">Style</button>
+          </div>
+
+          <!-- Content editing -->
+          <div id="prop-content" class="prop-tab-content active">
+            <div id="prop-text-section" class="prop-section hidden">
+              <label class="prop-label">Text</label>
+              <textarea id="prop-text-input" class="prop-textarea" rows="3"></textarea>
+            </div>
+            <div id="prop-image-section" class="prop-section hidden">
+              <label class="prop-label">Image URL</label>
+              <input type="text" id="prop-img-src" class="prop-input" placeholder="https://...">
+              <label class="prop-label">Alt Text</label>
+              <input type="text" id="prop-img-alt" class="prop-input" placeholder="Image description">
+            </div>
+            <div id="prop-link-section" class="prop-section hidden">
+              <label class="prop-label">Link Text</label>
+              <input type="text" id="prop-link-text" class="prop-input" placeholder="Click here">
+              <label class="prop-label">URL</label>
+              <input type="text" id="prop-link-href" class="prop-input" placeholder="https://...">
+            </div>
+            <button id="prop-apply" class="toolbar-btn btn-primary prop-apply-btn">Apply</button>
+          </div>
+
+          <!-- Style overrides -->
+          <div id="prop-style" class="prop-tab-content">
+            <div class="prop-section">
+              <div class="prop-section-title">Spacing</div>
+              <div class="style-slider-group">
+                <label>Margin Top</label>
+                <div class="slider-row">
+                  <input type="range" id="style-marginTop" min="-100" max="100" value="0" class="style-slider">
+                  <span class="slider-value" id="val-marginTop">0px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Margin Bottom</label>
+                <div class="slider-row">
+                  <input type="range" id="style-marginBottom" min="-100" max="100" value="0" class="style-slider">
+                  <span class="slider-value" id="val-marginBottom">0px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Padding Top</label>
+                <div class="slider-row">
+                  <input type="range" id="style-paddingTop" min="0" max="100" value="0" class="style-slider">
+                  <span class="slider-value" id="val-paddingTop">0px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Padding Bottom</label>
+                <div class="slider-row">
+                  <input type="range" id="style-paddingBottom" min="0" max="100" value="0" class="style-slider">
+                  <span class="slider-value" id="val-paddingBottom">0px</span>
+                </div>
+              </div>
+            </div>
+            <div class="prop-section">
+              <div class="prop-section-title">Typography</div>
+              <div class="style-slider-group">
+                <label>Font Size</label>
+                <div class="slider-row">
+                  <input type="range" id="style-fontSize" min="8" max="80" value="16" class="style-slider">
+                  <span class="slider-value" id="val-fontSize">16px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Line Height</label>
+                <div class="slider-row">
+                  <input type="range" id="style-lineHeight" min="50" max="300" value="150" step="10" class="style-slider">
+                  <span class="slider-value" id="val-lineHeight">1.5</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Letter Spacing</label>
+                <div class="slider-row">
+                  <input type="range" id="style-letterSpacing" min="-3" max="10" value="0" class="style-slider">
+                  <span class="slider-value" id="val-letterSpacing">0px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Text Align</label>
+                <div class="text-align-btns">
+                  <button class="align-btn active" data-align="left" title="Left">&#8676;</button>
+                  <button class="align-btn" data-align="center" title="Center">&#8596;</button>
+                  <button class="align-btn" data-align="right" title="Right">&#8677;</button>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Font Weight</label>
+                <select id="style-fontWeight" class="prop-select">
+                  <option value="">Default</option>
+                  <option value="300">Light</option>
+                  <option value="400">Normal</option>
+                  <option value="500">Medium</option>
+                  <option value="600">Semi-bold</option>
+                  <option value="700">Bold</option>
+                  <option value="900">Black</option>
+                </select>
+              </div>
+            </div>
+            <button id="style-apply" class="toolbar-btn btn-primary prop-apply-btn">Apply styles</button>
+            <button id="style-reset" class="toolbar-btn btn-secondary prop-apply-btn">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sections Panel -->
+      <div id="panel-sections" class="panel-content">
+        <div id="sections-list" class="sections-list">
+          <p class="panel-empty">Loading sections...</p>
+        </div>
+      </div>
+
+      <!-- SEO Panel -->
+      <div id="panel-seo" class="panel-content">
+        <div class="seo-preview">
+          <div class="seo-preview-title">Google Preview</div>
+          <div class="google-preview">
+            <div class="gp-title" id="seo-gp-title">Page Title</div>
+            <div class="gp-url" id="seo-gp-url">example.com</div>
+            <div class="gp-desc" id="seo-gp-desc">Page description will appear here...</div>
+          </div>
+        </div>
+        <div class="prop-section">
+          <label class="prop-label">Page Title</label>
+          <input type="text" id="seo-title" class="prop-input" placeholder="My Page Title" maxlength="120">
+          <span class="char-count"><span id="seo-title-count">0</span>/60</span>
+        </div>
+        <div class="prop-section">
+          <label class="prop-label">Meta Description</label>
+          <textarea id="seo-description" class="prop-textarea" rows="3" placeholder="A brief description..." maxlength="320"></textarea>
+          <span class="char-count"><span id="seo-desc-count">0</span>/160</span>
+        </div>
+        <div class="prop-section">
+          <label class="prop-label">OG Image URL</label>
+          <input type="text" id="seo-ogImage" class="prop-input" placeholder="https://...">
+        </div>
+        <div class="prop-section">
+          <label class="prop-label">Canonical URL</label>
+          <input type="text" id="seo-canonicalUrl" class="prop-input" placeholder="https://...">
+        </div>
+        <div class="prop-section">
+          <label class="prop-label checkbox-label">
+            <input type="checkbox" id="seo-noIndex"> No Index (hide from search engines)
+          </label>
+        </div>
+        <button id="seo-save" class="toolbar-btn btn-primary prop-apply-btn">Save SEO</button>
+
+        <div class="seo-checklist">
+          <div class="prop-section-title">SEO Checklist</div>
+          <div id="seo-checks"></div>
+        </div>
+      </div>
+
+      <!-- Inbox Panel (placeholder) -->
+      <div id="panel-inbox" class="panel-content">
+        <div class="panel-empty">
+          <p>Client messages will appear here</p>
+          <p class="panel-empty-sub">Coming soon</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- History overlay panel -->
     <div id="history-panel" class="history-panel hidden">
       <div class="history-header">
         <h3>Version History</h3>
@@ -42,7 +235,7 @@
       <div id="history-list" class="history-list"></div>
     </div>
 
-    <!-- AI Chat Panel -->
+    <!-- AI Chat Panel (overlay) -->
     <div id="chat-panel" class="chat-panel hidden">
       <div class="chat-header">
         <h3>AI Assistant</h3>
@@ -50,7 +243,7 @@
       </div>
       <div id="chat-messages" class="chat-messages">
         <div class="chat-msg chat-msg-system">
-          Tell me what you'd like to change on the site. For example: "Change the main heading to Welcome" or "Update the phone number to 050-1234567"
+          Tell me what you'd like to change on the site.
         </div>
       </div>
       <div class="chat-input-area">
@@ -66,32 +259,6 @@
   <div id="publish-bar" class="publish-bar hidden">
     <span id="publish-status-text"></span>
     <a id="publish-link" href="#" target="_blank" rel="noopener" class="hidden">View live site</a>
-  </div>
-
-  <!-- Image edit popover -->
-  <div id="popover-image" class="popover hidden">
-    <h4>Edit Image</h4>
-    <label>Image URL</label>
-    <input type="text" id="popover-img-src" placeholder="https://...">
-    <label>Alt Text</label>
-    <input type="text" id="popover-img-alt" placeholder="Image description">
-    <div class="popover-actions">
-      <button id="popover-img-apply" class="toolbar-btn btn-primary">Apply</button>
-      <button id="popover-img-cancel" class="toolbar-btn btn-secondary">Cancel</button>
-    </div>
-  </div>
-
-  <!-- Link edit popover -->
-  <div id="popover-link" class="popover hidden">
-    <h4>Edit Link</h4>
-    <label>Link Text</label>
-    <input type="text" id="popover-link-text" placeholder="Click here">
-    <label>URL</label>
-    <input type="text" id="popover-link-href" placeholder="https://...">
-    <div class="popover-actions">
-      <button id="popover-link-apply" class="toolbar-btn btn-primary">Apply</button>
-      <button id="popover-link-cancel" class="toolbar-btn btn-secondary">Cancel</button>
-    </div>
   </div>
 
   <!-- Onboarding Tooltips -->

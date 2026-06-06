@@ -109,6 +109,26 @@ export async function updateMeta(siteId, updates) {
   return updated;
 }
 
+// SEO & Styles (stored in meta.json)
+
+export async function saveSeo(siteId, seo) {
+  return updateMeta(siteId, { seo });
+}
+
+export async function getSeo(siteId) {
+  const meta = await getMeta(siteId);
+  return meta?.seo || {};
+}
+
+export async function saveStyles(siteId, styles) {
+  return updateMeta(siteId, { styles });
+}
+
+export async function getStyles(siteId) {
+  const meta = await getMeta(siteId);
+  return meta?.styles || {};
+}
+
 // Settings (file-based fallback)
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
