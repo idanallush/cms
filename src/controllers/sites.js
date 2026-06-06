@@ -120,3 +120,16 @@ export async function preview(req, res) {
 
   res.type('html').send(html);
 }
+
+export async function render(req, res) {
+  const { siteId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const template = await store.getTemplate(siteId);
+  const content = await store.getContent(siteId);
+  const html = renderTemplate(template, content);
+
+  res.type('html').send(html);
+}

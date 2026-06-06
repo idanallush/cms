@@ -11,5 +11,6 @@ router.put('/:siteId/content', asyncHandler(ctrl.updateContent));
 router.get('/:siteId/versions', asyncHandler(ctrl.listVersions));
 router.post('/:siteId/rollback/:versionId', asyncHandler(ctrl.rollback));
 router.get('/:siteId/preview', asyncHandler(ctrl.preview));
+router.get('/:siteId/render', asyncHandler(ctrl.render));
 
 export default router;

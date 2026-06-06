@@ -62,6 +62,8 @@ export async function ingestUrl(url) {
         path: elPath,
       };
 
+      $el.attr('data-slot-id', slotId);
+      $el.attr('data-slot-type', 'text');
       $el.empty().text(`{{${slotId}}}`);
     });
   });
@@ -73,6 +75,8 @@ export async function ingestUrl(url) {
     const text = $el.text().trim();
     const elPath = buildElementPath(el, $);
 
+    const slotIds = [];
+
     if (text) {
       const textSlotId = generateSlotId('a_text', elPath, slotCounter++);
       contentMap[textSlotId] = {
@@ -82,6 +86,7 @@ export async function ingestUrl(url) {
         path: elPath,
       };
       $el.empty().text(`{{${textSlotId}}}`);
+      slotIds.push(textSlotId);
     }
 
     if (href) {
@@ -93,6 +98,12 @@ export async function ingestUrl(url) {
         path: elPath,
       };
       $el.attr('href', `{{${hrefSlotId}}}`);
+      slotIds.push(hrefSlotId);
+    }
+
+    if (slotIds.length) {
+      $el.attr('data-slot-id', slotIds.join(','));
+      $el.attr('data-slot-type', 'link');
     }
   });
 
@@ -121,6 +132,9 @@ export async function ingestUrl(url) {
         path: elPath,
       };
       $el.attr('alt', `{{${altSlotId}}}`);
+
+      $el.attr('data-slot-id', [srcSlotId, altSlotId].join(','));
+      $el.attr('data-slot-type', 'image');
     }
   });
 
@@ -141,6 +155,8 @@ export async function ingestUrl(url) {
         path: elPath,
       };
 
+      $el.attr('data-slot-id', slotId);
+      $el.attr('data-slot-type', 'text');
       $el.empty().text(`{{${slotId}}}`);
     });
   });
@@ -161,6 +177,8 @@ export async function ingestUrl(url) {
       path: elPath,
     };
 
+    $el.attr('data-slot-id', slotId);
+    $el.attr('data-slot-type', 'text');
     $el.attr('value', `{{${slotId}}}`);
   });
 
