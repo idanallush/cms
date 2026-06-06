@@ -21,7 +21,7 @@ export async function ingestSite(req, res) {
   let frozenTemplate, contentMap, originalUrl;
 
   if (rawHtml && typeof rawHtml === 'string') {
-    ({ frozenTemplate, contentMap } = await ingestHtml(rawHtml));
+    ({ frozenTemplate, contentMap } = await ingestHtml(rawHtml, url || undefined));
     originalUrl = url || 'pasted-html';
   } else {
     if (typeof url !== 'string') {
@@ -142,7 +142,10 @@ export async function preview(req, res) {
   const styles = await store.getStyles(siteId);
   const html = renderTemplate(template, content, styles);
 
-  res.type('html').send(html);
+  res.removeHeader('X-Frame-Options');
+  res.removeHeader('Content-Security-Policy');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
 }
 
 export async function render(req, res) {
@@ -156,7 +159,10 @@ export async function render(req, res) {
   const styles = await store.getStyles(siteId);
   const html = renderTemplate(template, content, styles);
 
-  res.type('html').send(html);
+  res.removeHeader('X-Frame-Options');
+  res.removeHeader('Content-Security-Policy');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
 }
 
 export async function deleteSite(req, res) {

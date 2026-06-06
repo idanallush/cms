@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 3500;
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
 }));
 app.use(cors({ credentials: true }));
 app.use(cookieParser());

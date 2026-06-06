@@ -250,6 +250,68 @@ async function runTests() {
   assert(templateSize > 1000, `Template is ${templateSize} bytes (large enough for full HTML)`);
   assert(templateSize > COMPLEX_HTML.length * 0.9, 'Template is similar size to original (not stripped)');
 
+  // ── Test 7: URL absolutization ──
+  console.log('\n=== Test 7: URL absolutization ===');
+  const HTML_WITH_RELATIVE = `<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="icon" href="/favicon.ico">
+  <script src="/js/app.js"></script>
+  <style>.hero { background: url('/images/bg.jpg'); }</style>
+</head>
+<body>
+  <img src="/images/logo.png" alt="Logo">
+  <img srcset="/images/small.jpg 480w, /images/large.jpg 1024w" src="/images/default.jpg" alt="Responsive">
+  <a href="/about">About</a>
+  <a href="#contact">Contact</a>
+  <a href="https://external.com">External</a>
+  <video src="/video/intro.mp4" poster="/images/poster.jpg"></video>
+  <div style="background-image: url('/images/pattern.png');">Content</div>
+  <form action="/submit">
+    <input type="submit" value="Send">
+  </form>
+  <iframe src="/embed/widget"></iframe>
+</body>
+</html>`;
+
+  const { frozenTemplate: absTemplate } = await ingestHtml(HTML_WITH_RELATIVE, 'https://mysite.com/landing/page');
+
+  // CSS/JS/links should be absolute
+  assert(absTemplate.includes('href="https://mysite.com/css/main.css"'), 'Stylesheet href absolutized');
+  assert(absTemplate.includes('href="https://mysite.com/favicon.ico"'), 'Favicon href absolutized');
+  assert(absTemplate.includes('src="https://mysite.com/js/app.js"'), 'Script src absolutized');
+
+  // Images
+  assert(absTemplate.includes('src="https://mysite.com/images/logo.png"'), 'Image src absolutized');
+  assert(absTemplate.includes('https://mysite.com/images/small.jpg 480w'), 'Srcset absolutized');
+
+  // Links
+  assert(absTemplate.includes('href="https://mysite.com/about"'), 'Relative link absolutized');
+  assert(absTemplate.includes('href="#contact"'), 'Anchor link kept as-is');
+  assert(absTemplate.includes('href="https://external.com"'), 'Absolute link untouched');
+
+  // Video/poster
+  assert(absTemplate.includes('src="https://mysite.com/video/intro.mp4"'), 'Video src absolutized');
+  assert(absTemplate.includes('poster="https://mysite.com/images/poster.jpg"'), 'Video poster absolutized');
+
+  // Inline style bg
+  assert(absTemplate.includes("url('https://mysite.com/images/pattern.png')"), 'Inline style bg absolutized');
+
+  // Embedded <style> bg
+  assert(absTemplate.includes("url('https://mysite.com/images/bg.jpg')"), 'Embedded style bg absolutized');
+
+  // Form action
+  assert(absTemplate.includes('action="https://mysite.com/submit"'), 'Form action absolutized');
+
+  // iframe
+  assert(absTemplate.includes('src="https://mysite.com/embed/widget"'), 'Iframe src absolutized');
+
+  // ── Test 8: No absolutization for pasted HTML ──
+  console.log('\n=== Test 8: Pasted HTML (no source URL) ===');
+  const { frozenTemplate: pastedTemplate } = await ingestHtml(HTML_WITH_RELATIVE);
+  assert(pastedTemplate.includes('href="/css/main.css"'), 'Pasted HTML: relative URLs kept as-is');
+
   // ── Summary ──
   console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
   if (failed > 0) process.exit(1);

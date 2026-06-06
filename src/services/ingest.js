@@ -51,8 +51,122 @@ function isAlreadyTagged($el) {
   return $el.attr('data-slot-id') !== undefined;
 }
 
-export async function ingestHtml(rawHtml) {
-  return parseHtml(rawHtml);
+// ── URL absolutization ──
+
+function makeAbsolute(relativeUrl, pageUrl) {
+  if (!relativeUrl) return relativeUrl;
+  if (relativeUrl.startsWith('data:')) return relativeUrl;
+  if (relativeUrl.startsWith('mailto:')) return relativeUrl;
+  if (relativeUrl.startsWith('tel:')) return relativeUrl;
+  if (relativeUrl.startsWith('#')) return relativeUrl;
+  if (relativeUrl.startsWith('javascript:')) return relativeUrl;
+  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) return relativeUrl;
+  if (relativeUrl.startsWith('//')) return 'https:' + relativeUrl;
+  try {
+    return new URL(relativeUrl, pageUrl).href;
+  } catch {
+    return relativeUrl;
+  }
+}
+
+function convertAllUrlsToAbsolute($, pageUrl) {
+  if (!pageUrl || pageUrl === 'pasted-html') return;
+
+  // Images: src, srcset
+  $('img').each((i, el) => {
+    const src = $(el).attr('src');
+    if (src) $(el).attr('src', makeAbsolute(src, pageUrl));
+    const srcset = $(el).attr('srcset');
+    if (srcset) {
+      $(el).attr('srcset', srcset.split(',').map(s => {
+        const parts = s.trim().split(/\s+/);
+        parts[0] = makeAbsolute(parts[0], pageUrl);
+        return parts.join(' ');
+      }).join(', '));
+    }
+  });
+
+  // Stylesheets
+  $('link[href]').each((i, el) => {
+    $(el).attr('href', makeAbsolute($(el).attr('href'), pageUrl));
+  });
+
+  // Scripts
+  $('script[src]').each((i, el) => {
+    $(el).attr('src', makeAbsolute($(el).attr('src'), pageUrl));
+  });
+
+  // Video, audio, source elements
+  $('video, audio, source').each((i, el) => {
+    const src = $(el).attr('src');
+    if (src) $(el).attr('src', makeAbsolute(src, pageUrl));
+    const poster = $(el).attr('poster');
+    if (poster) $(el).attr('poster', makeAbsolute(poster, pageUrl));
+  });
+
+  // Links (a href) — keep #anchor links as-is
+  $('a[href]').each((i, el) => {
+    const href = $(el).attr('href');
+    if (href && !href.startsWith('#')) {
+      $(el).attr('href', makeAbsolute(href, pageUrl));
+    }
+  });
+
+  // Object/embed elements
+  $('object[data], embed[src]').each((i, el) => {
+    const data = $(el).attr('data');
+    if (data) $(el).attr('data', makeAbsolute(data, pageUrl));
+    const src = $(el).attr('src');
+    if (src) $(el).attr('src', makeAbsolute(src, pageUrl));
+  });
+
+  // Background images in inline style="" attributes
+  $('[style]').each((i, el) => {
+    let style = $(el).attr('style');
+    if (style && style.includes('url(')) {
+      style = style.replace(/url\(\s*['"]?([^'")]+?)['"]?\s*\)/g, (match, url) => {
+        return `url('${makeAbsolute(url.trim(), pageUrl)}')`;
+      });
+      $(el).attr('style', style);
+    }
+  });
+
+  // Background images in embedded <style> tags
+  $('style').each((i, el) => {
+    let css = $(el).html();
+    if (css && css.includes('url(')) {
+      css = css.replace(/url\(\s*['"]?([^'")]+?)['"]?\s*\)/g, (match, url) => {
+        return `url('${makeAbsolute(url.trim(), pageUrl)}')`;
+      });
+      $(el).html(css);
+    }
+  });
+
+  // Meta tags with URLs (og:image, etc)
+  $('meta[content]').each((i, el) => {
+    const property = $(el).attr('property') || $(el).attr('name') || '';
+    if (property.includes('image') || property.includes('url') || property.includes('icon')) {
+      const content = $(el).attr('content');
+      if (content && (content.startsWith('/') || content.startsWith('./'))) {
+        $(el).attr('content', makeAbsolute(content, pageUrl));
+      }
+    }
+  });
+
+  // Form actions
+  $('form[action]').each((i, el) => {
+    const action = $(el).attr('action');
+    if (action) $(el).attr('action', makeAbsolute(action, pageUrl));
+  });
+
+  // iframes
+  $('iframe[src]').each((i, el) => {
+    $(el).attr('src', makeAbsolute($(el).attr('src'), pageUrl));
+  });
+}
+
+export async function ingestHtml(rawHtml, sourceUrl) {
+  return parseHtml(rawHtml, sourceUrl || 'pasted-html');
 }
 
 export async function ingestUrl(url) {
@@ -63,11 +177,14 @@ export async function ingestUrl(url) {
   });
 
   const html = response.data;
-  return parseHtml(html);
+  return parseHtml(html, url);
 }
 
-function parseHtml(html) {
+function parseHtml(html, pageUrl) {
   const $ = cheerio.load(html, { decodeEntities: false });
+
+  // Step 1: Convert all relative URLs to absolute
+  convertAllUrlsToAbsolute($, pageUrl);
 
   const contentMap = {};
   let slotCounter = 0;
