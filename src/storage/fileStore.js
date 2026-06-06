@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -77,4 +77,34 @@ export async function getVersion(siteId, versionId) {
 
 export async function siteExists(siteId) {
   return existsSync(path.join(sitePath(siteId), 'meta.json'));
+}
+
+export async function listAllSites() {
+  const sitesDir = path.join(DATA_DIR, 'sites');
+  if (!existsSync(sitesDir)) return [];
+  const dirs = await readdir(sitesDir);
+  const sites = [];
+  for (const dir of dirs) {
+    const meta = await getMeta(dir);
+    if (meta) {
+      const versions = await listVersions(dir);
+      sites.push({ ...meta, versionCount: versions.length });
+    }
+  }
+  return sites;
+}
+
+export async function deleteSite(siteId) {
+  const dir = sitePath(siteId);
+  if (!existsSync(dir)) return false;
+  await rm(dir, { recursive: true, force: true });
+  return true;
+}
+
+export async function updateMeta(siteId, updates) {
+  const meta = await getMeta(siteId);
+  if (!meta) return null;
+  const updated = { ...meta, ...updates };
+  await saveMeta(siteId, updated);
+  return updated;
 }

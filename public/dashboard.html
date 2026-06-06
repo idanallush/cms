@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Client CMS</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <nav class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-brand">Client CMS</span>
+    </div>
+    <div class="topbar-right">
+      <a href="/logout" class="topbar-link">Logout</a>
+    </div>
+  </nav>
+
+  <main class="dashboard">
+    <section class="ingest-section">
+      <h2>Ingest New Site</h2>
+      <form id="ingest-form" class="ingest-form">
+        <input type="text" id="ingest-url" placeholder="https://example.com" required>
+        <input type="text" id="ingest-name" placeholder="Site name (optional)">
+        <button type="submit" id="btn-ingest" class="btn-primary">Ingest</button>
+      </form>
+      <div id="ingest-status" class="ingest-status hidden"></div>
+    </section>
+
+    <section class="sites-section">
+      <h2>Your Sites</h2>
+      <div id="sites-grid" class="sites-grid">
+        <p class="loading-text">Loading sites...</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Site Settings</h3>
+        <button id="modal-close" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Site Name</label>
+          <input type="text" id="settings-name">
+        </div>
+        <div class="form-group">
+          <label>Custom Domain</label>
+          <input type="text" id="settings-domain" placeholder="www.example.com">
+        </div>
+        <div class="form-group">
+          <label>Client Login URL</label>
+          <div class="copy-row">
+            <input type="text" id="settings-login-url" readonly>
+            <button id="btn-copy-url" class="btn-small btn-secondary">Copy</button>
+          </div>
+        </div>
+        <hr class="modal-divider">
+        <div class="form-group">
+          <label>Set Client Password</label>
+          <div class="copy-row">
+            <input type="password" id="settings-password" placeholder="Min. 8 characters">
+            <button id="btn-set-password" class="btn-small btn-primary">Set</button>
+          </div>
+          <span id="password-status" class="field-status"></span>
+        </div>
+        <hr class="modal-divider">
+        <div class="form-group">
+          <label class="label-danger">Delete Site</label>
+          <p class="help-text">Type the site name to confirm deletion.</p>
+          <div class="copy-row">
+            <input type="text" id="settings-delete-confirm" placeholder="Type site name">
+            <button id="btn-delete-site" class="btn-small btn-danger" disabled>Delete</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>
