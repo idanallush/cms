@@ -437,6 +437,16 @@ body {
   background: #3b82f6;
 }
 
+.btn-action-danger {
+  color: #888;
+}
+
+.btn-action-danger:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
 /* Expandable sections */
 .site-card-expand {
   border-top: 1px solid #2a2a2a;

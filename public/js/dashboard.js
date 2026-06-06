@@ -210,6 +210,8 @@
           ${site.publishUrl ? `<button class="btn-action" data-action="live" data-url="${escapeHtml(site.publishUrl)}"><span class="dot-green"></span>View live site</button>` : ''}
           <button class="btn-action" data-action="edit" data-id="${site.siteId}">&#9998; Open editor</button>
           <button class="btn-action" data-action="export" data-id="${site.siteId}">&#8681; Export static</button>
+          <button class="btn-action" data-action="rename" data-id="${site.siteId}" data-name="${escapeHtml(site.name)}">&#9998; Rename</button>
+          <button class="btn-action btn-action-danger" data-action="delete" data-id="${site.siteId}" data-name="${escapeHtml(site.name)}">&#10005; Delete</button>
         </div>
 
         <!-- Client Access -->
@@ -291,6 +293,14 @@
 
     card.querySelectorAll('[data-action="gen-token"]').forEach(btn => {
       btn.addEventListener('click', () => generateToken(btn.dataset.id, card));
+    });
+
+    card.querySelectorAll('[data-action="rename"]').forEach(btn => {
+      btn.addEventListener('click', () => renameSite(btn.dataset.id, btn.dataset.name));
+    });
+
+    card.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', () => deleteSite(btn.dataset.id, btn.dataset.name));
     });
 
     card.querySelectorAll('[data-action="deploy"]').forEach(btn => {
@@ -404,6 +414,47 @@
     } finally {
       btn.disabled = false;
       btn.textContent = 'Save & deploy';
+    }
+  }
+
+  // ── Rename Site ──
+  async function renameSite(siteId, currentName) {
+    const newName = prompt('Enter new site name:', currentName);
+    if (!newName || newName.trim() === '' || newName.trim() === currentName) return;
+
+    try {
+      const res = await fetch(`${API}/${siteId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      if (res.ok) {
+        showToast('Site renamed', 'success');
+        loadSites();
+      } else {
+        const data = await res.json();
+        showToast(data.error?.message || 'Rename failed', 'error');
+      }
+    } catch {
+      showToast('Connection error', 'error');
+    }
+  }
+
+  // ── Delete Site ──
+  async function deleteSite(siteId, siteName) {
+    if (!confirm(`Delete "${siteName}"? This will permanently remove the site and all its versions. This cannot be undone.`)) return;
+
+    try {
+      const res = await fetch(`${API}/${siteId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('Site deleted', 'success');
+        loadSites();
+      } else {
+        const data = await res.json();
+        showToast(data.error?.message || 'Delete failed', 'error');
+      }
+    } catch {
+      showToast('Connection error', 'error');
     }
   }
 
