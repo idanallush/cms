@@ -37,6 +37,10 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+app.get('/', (req, res) => {
+  res.redirect('/login');
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -71,22 +75,18 @@ app.get('/logout', (req, res) => {
 
 app.use(errorHandler);
 
-// Initialize storage and start server
-async function start() {
-  try {
-    // Initialize storage (connects to MongoDB if MONGODB_URI is set)
-    await getStore();
-    console.log('Storage initialized');
-  } catch (err) {
-    console.error('Storage init error:', err.message);
-    // Continue anyway for file-based storage fallback
-  }
+// Initialize storage (connects to MongoDB if MONGODB_URI is set)
+const storageReady = getStore()
+  .then(() => console.log('Storage initialized'))
+  .catch(err => console.error('Storage init error:', err.message));
 
-  app.listen(PORT, () => {
-    console.log(`Client CMS running on port ${PORT}`);
+// Only listen when running directly (not on Vercel)
+if (!process.env.VERCEL) {
+  storageReady.then(() => {
+    app.listen(PORT, () => {
+      console.log(`Client CMS running on port ${PORT}`);
+    });
   });
 }
-
-start();
 
 export default app;
