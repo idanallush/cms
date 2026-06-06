@@ -1,15 +1,21 @@
 import * as store from '../storage/index.js';
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'openai/gpt-4o-mini';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-/**
- * Process an AI chat message to edit site content
- */
+async function getAiConfig() {
+  const settings = await store.getAllSettings();
+  const provider = settings.ai_provider || 'openrouter';
+  const model = settings.ai_model || 'anthropic/claude-sonnet-4.5';
+  const apiKey = settings.openrouter_api_key || process.env.OPENROUTER_API_KEY;
+  return { provider, model, apiKey };
+}
+
 export async function processChat(siteId, userMessage) {
+  const { provider, model, apiKey: OPENROUTER_API_KEY } = await getAiConfig();
+
   if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY not configured');
+    throw new Error('AI API key not configured. Add one in the Config panel.');
   }
 
   const content = await store.getContent(siteId);

@@ -12,13 +12,25 @@ const siteSchema = new Schema({
   contentMap: { type: Schema.Types.Mixed, default: {} },
   slotCount: { type: Number, default: 0 },
   clientPasswordHash: { type: String, default: null },
+  clientDisplayName: { type: String, default: null },
+  clientHasAccessed: { type: Boolean, default: false },
+  requireApproval: { type: Boolean, default: false },
+  accessToken: { type: String, default: null },
   customDomain: { type: String, default: null },
   lastEditedAt: { type: Date, default: Date.now },
   publishedAt: { type: Date, default: null },
   publishUrl: { type: String, default: null },
   vercelProjectId: { type: String, default: null },
+  vercelProjectName: { type: String, default: null },
   vercelDeploymentId: { type: String, default: null },
 }, { timestamps: true });
+
+const settingsSchema = new Schema({
+  key: { type: String, required: true, unique: true },
+  value: { type: String, required: true },
+}, { timestamps: true });
+
+const Settings = model('Settings', settingsSchema);
 
 const versionSchema = new Schema({
   siteId: { type: String, required: true, index: true },
@@ -71,10 +83,15 @@ export async function getMeta(siteId) {
     lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
     slotCount: site.slotCount,
     clientPasswordHash: site.clientPasswordHash,
+    clientDisplayName: site.clientDisplayName,
+    clientHasAccessed: site.clientHasAccessed,
+    requireApproval: site.requireApproval,
+    accessToken: site.accessToken,
     customDomain: site.customDomain,
     publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
     publishUrl: site.publishUrl,
     vercelProjectId: site.vercelProjectId,
+    vercelProjectName: site.vercelProjectName,
     vercelDeploymentId: site.vercelDeploymentId,
   };
 }
@@ -159,10 +176,15 @@ export async function listAllSites() {
       lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
       slotCount: site.slotCount,
       clientPasswordHash: site.clientPasswordHash,
+      clientDisplayName: site.clientDisplayName,
+      clientHasAccessed: site.clientHasAccessed,
+      requireApproval: site.requireApproval,
+      accessToken: site.accessToken,
       customDomain: site.customDomain,
       publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
       publishUrl: site.publishUrl,
       vercelProjectId: site.vercelProjectId,
+      vercelProjectName: site.vercelProjectName,
       vercelDeploymentId: site.vercelDeploymentId,
       versionCount,
     });
@@ -192,10 +214,39 @@ export async function updateMeta(siteId, updates) {
     lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
     slotCount: site.slotCount,
     clientPasswordHash: site.clientPasswordHash,
+    clientDisplayName: site.clientDisplayName,
+    clientHasAccessed: site.clientHasAccessed,
+    requireApproval: site.requireApproval,
+    accessToken: site.accessToken,
     customDomain: site.customDomain,
     publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
     publishUrl: site.publishUrl,
     vercelProjectId: site.vercelProjectId,
+    vercelProjectName: site.vercelProjectName,
     vercelDeploymentId: site.vercelDeploymentId,
   };
+}
+
+// ── Settings API ──
+
+export async function getSetting(key) {
+  const doc = await Settings.findOne({ key }).lean();
+  return doc?.value || null;
+}
+
+export async function setSetting(key, value) {
+  await Settings.findOneAndUpdate(
+    { key },
+    { key, value },
+    { upsert: true }
+  );
+}
+
+export async function getAllSettings() {
+  const docs = await Settings.find({}).lean();
+  const result = {};
+  for (const doc of docs) {
+    result[doc.key] = doc.value;
+  }
+  return result;
 }

@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { ingestUrl } from '../services/ingest.js';
+import { ingestUrl, ingestHtml } from '../services/ingest.js';
 import { renderTemplate } from '../services/template.js';
+import { generatePublishHtml } from '../services/publisher.js';
 import { validateChanges } from '../services/guardian.js';
 import { hashPassword } from '../services/auth.js';
 import * as store from '../storage/index.js';
@@ -11,28 +12,40 @@ export async function listSites(req, res) {
 }
 
 export async function ingestSite(req, res) {
-  const { url, name } = req.body;
-  if (!url || typeof url !== 'string') {
-    return res.status(400).json({ error: { message: 'url is required' } });
+  const { url, name, html: rawHtml } = req.body;
+
+  if (!url && !rawHtml) {
+    return res.status(400).json({ error: { message: 'url or html is required' } });
   }
 
-  try {
-    new URL(url);
-  } catch {
-    return res.status(400).json({ error: { message: 'Invalid URL format' } });
+  let frozenTemplate, contentMap, originalUrl;
+
+  if (rawHtml && typeof rawHtml === 'string') {
+    ({ frozenTemplate, contentMap } = await ingestHtml(rawHtml));
+    originalUrl = url || 'pasted-html';
+  } else {
+    if (typeof url !== 'string') {
+      return res.status(400).json({ error: { message: 'url must be a string' } });
+    }
+    try {
+      new URL(url);
+    } catch {
+      return res.status(400).json({ error: { message: 'Invalid URL format' } });
+    }
+    ({ frozenTemplate, contentMap } = await ingestUrl(url));
+    originalUrl = url;
   }
 
   const siteId = uuidv4();
-  const { frozenTemplate, contentMap } = await ingestUrl(url);
-
   const meta = {
     siteId,
-    name: name || new URL(url).hostname,
-    originalUrl: url,
+    name: name || (url ? new URL(url).hostname : 'Pasted Site'),
+    originalUrl,
     createdAt: new Date().toISOString(),
     lastEditedAt: new Date().toISOString(),
     slotCount: Object.keys(contentMap).length,
     clientPasswordHash: null,
+    clientDisplayName: null,
     customDomain: null,
   };
 
@@ -153,22 +166,6 @@ export async function deleteSite(req, res) {
   res.json({ success: true });
 }
 
-export async function updateSettings(req, res) {
-  const { siteId } = req.params;
-  const { name, customDomain } = req.body;
-
-  if (!(await store.siteExists(siteId))) {
-    return res.status(404).json({ error: { message: 'Site not found' } });
-  }
-
-  const updates = {};
-  if (name !== undefined) updates.name = name;
-  if (customDomain !== undefined) updates.customDomain = customDomain;
-
-  const updated = await store.updateMeta(siteId, updates);
-  res.json(updated);
-}
-
 export async function setClientPassword(req, res) {
   const { siteId } = req.params;
   const { password } = req.body;
@@ -185,6 +182,98 @@ export async function setClientPassword(req, res) {
   }
 
   const hash = await hashPassword(password);
-  const updated = await store.updateMeta(siteId, { clientPasswordHash: hash });
+  await store.updateMeta(siteId, { clientPasswordHash: hash });
   res.json({ success: true, hasClientPassword: true });
+}
+
+export async function exportSite(req, res) {
+  const { siteId } = req.params;
+  const meta = await store.getMeta(siteId);
+  if (!meta) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const template = await store.getTemplate(siteId);
+  const content = await store.getContent(siteId);
+  if (!template || !content) {
+    return res.status(404).json({ error: { message: 'Site has no content' } });
+  }
+
+  const html = generatePublishHtml(template, content, meta);
+  const filename = (meta.name || 'site').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+
+  res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}.html"`);
+  res.send(html);
+}
+
+export async function generateAccessToken(req, res) {
+  const { siteId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const token = uuidv4().replace(/-/g, '').slice(0, 24);
+  await store.updateMeta(siteId, { accessToken: token });
+  res.json({ success: true, token });
+}
+
+export async function getSettings(req, res) {
+  const settings = await store.getAllSettings();
+  const hasAiKey = !!(settings.openrouter_api_key || process.env.OPENROUTER_API_KEY);
+  const hasVercelToken = !!(settings.vercel_token || process.env.VERCEL_TOKEN);
+  const hasDb = !!process.env.MONGODB_URI;
+
+  res.json({
+    ai: {
+      connected: hasAiKey,
+      provider: settings.ai_provider || 'openrouter',
+      model: settings.ai_model || 'anthropic/claude-sonnet-4.5',
+    },
+    vercel: {
+      connected: hasVercelToken,
+      teamId: settings.vercel_team_id || process.env.VERCEL_TEAM_ID || null,
+    },
+    db: {
+      connected: hasDb,
+      mode: hasDb ? 'mongodb' : 'filesystem',
+    },
+    ownerKey: process.env.OWNER_PASSWORD ? '***' : null,
+  });
+}
+
+export async function updateSettings(req, res) {
+  const { siteId } = req.params;
+  const { name, customDomain, clientDisplayName, requireApproval, vercelProjectName } = req.body;
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const updates = {};
+  if (name !== undefined) updates.name = name;
+  if (customDomain !== undefined) updates.customDomain = customDomain;
+  if (clientDisplayName !== undefined) updates.clientDisplayName = clientDisplayName;
+  if (requireApproval !== undefined) updates.requireApproval = requireApproval;
+  if (vercelProjectName !== undefined) updates.vercelProjectName = vercelProjectName;
+
+  const updated = await store.updateMeta(siteId, updates);
+  res.json(updated);
+}
+
+export async function saveGlobalSettings(req, res) {
+  const { key, value, provider, model, teamId } = req.body;
+
+  if (key === 'ai') {
+    if (value) await store.setSetting('openrouter_api_key', value);
+    if (provider) await store.setSetting('ai_provider', provider);
+    if (model) await store.setSetting('ai_model', model);
+  } else if (key === 'vercel') {
+    if (value) await store.setSetting('vercel_token', value);
+    if (teamId) await store.setSetting('vercel_team_id', teamId);
+  } else {
+    return res.status(400).json({ error: { message: 'Unknown setting key' } });
+  }
+
+  res.json({ success: true });
 }

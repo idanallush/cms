@@ -45,6 +45,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Public endpoint for login page to get site display info
+app.get('/api/public/site/:siteId', async (req, res) => {
+  const { siteId } = req.params;
+  const store = await getStore();
+  const meta = await store.getMeta(siteId);
+  if (!meta) return res.status(404).json({ error: { message: 'Not found' } });
+  res.json({ name: meta.name, clientDisplayName: meta.clientDisplayName });
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/sites', sitesRouter);
 app.use('/api/sites', publishRouter);
@@ -57,8 +66,8 @@ app.get('/login', (req, res) => {
 
 app.get('/login/:siteId', async (req, res) => {
   const { siteId } = req.params;
-  const store = await getStore();
-  if (!(await store.siteExists(siteId))) {
+  const storeInstance = await getStore();
+  if (!(await storeInstance.siteExists(siteId))) {
     return res.status(404).send('<h1>Site not found</h1>');
   }
   res.sendFile(path.join(publicDir, 'login.html'));

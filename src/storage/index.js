@@ -22,6 +22,7 @@ const methods = [
   'ensureSiteDir', 'saveMeta', 'getMeta', 'saveTemplate', 'getTemplate',
   'saveContent', 'getContent', 'listVersions', 'getVersion',
   'siteExists', 'listAllSites', 'deleteSite', 'updateMeta',
+  'getSetting', 'setSetting', 'getAllSettings',
 ];
 
 const proxyStore = {};
@@ -37,4 +38,5 @@ export const {
   ensureSiteDir, saveMeta, getMeta, saveTemplate, getTemplate,
   saveContent, getContent, listVersions, getVersion,
   siteExists, listAllSites, deleteSite, updateMeta,
+  getSetting, setSetting, getAllSettings,
 } = proxyStore;

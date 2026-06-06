@@ -3,22 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - Client CMS</title>
+  <title>Login - AI CMS</title>
   <link rel="stylesheet" href="/css/auth.css">
 </head>
 <body>
   <div class="auth-container">
     <div class="auth-card">
-      <h1 id="auth-title">Client CMS</h1>
-      <p id="auth-subtitle" class="auth-subtitle">Owner Login</p>
+      <div class="auth-logo">
+        <svg width="28" height="28" viewBox="0 0 76 65" fill="none"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="#fff"/></svg>
+      </div>
+      <h1 id="auth-title">AI CMS</h1>
+      <p id="auth-subtitle" class="auth-subtitle">Enter your password to continue</p>
 
       <form id="login-form">
         <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" placeholder="Enter password" required autofocus>
+          <input type="password" id="password" placeholder="Password" required autofocus>
         </div>
         <div id="error-msg" class="error-msg hidden"></div>
-        <button type="submit" id="btn-login" class="btn-login">Login</button>
+        <button type="submit" id="btn-login" class="btn-login">Unlock editor</button>
       </form>
     </div>
   </div>
@@ -35,17 +37,23 @@
       const btnLogin = document.getElementById('btn-login');
 
       if (siteId) {
-        subtitle.textContent = 'Client Login';
-        btnLogin.textContent = 'Login';
-        fetch('/api/sites/' + siteId)
+        fetch('/api/public/site/' + siteId)
           .then(r => {
             if (!r.ok) throw new Error();
             return r.json();
           })
           .then(meta => {
-            title.textContent = meta.name || 'Site Login';
+            const displayName = meta.clientDisplayName || meta.name || 'Your Site';
+            title.textContent = displayName + ' \u{1F44B}';
+            subtitle.textContent = 'Enter the password to edit ' + (meta.name || 'this site') + '.';
           })
-          .catch(() => {});
+          .catch(() => {
+            title.textContent = 'Site Login';
+          });
+      } else {
+        title.textContent = 'Agency Console';
+        subtitle.textContent = 'Owner Login';
+        btnLogin.textContent = 'Login';
       }
 
       form.addEventListener('submit', async (e) => {
@@ -71,7 +79,7 @@
           const data = await res.json();
 
           if (res.ok && data.success) {
-            window.location.href = siteId ? '/editor/' + siteId : '/dashboard';
+            window.location.href = siteId ? '/editor/?site=' + siteId : '/dashboard';
           } else {
             errorMsg.textContent = data.error?.message || 'Login failed';
             errorMsg.classList.remove('hidden');
@@ -81,7 +89,7 @@
           errorMsg.classList.remove('hidden');
         } finally {
           btnLogin.disabled = false;
-          btnLogin.textContent = 'Login';
+          btnLogin.textContent = siteId ? 'Unlock editor' : 'Login';
         }
       });
     })();

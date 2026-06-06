@@ -29,6 +29,10 @@ function buildElementPath(el, $) {
   return parts.join('>');
 }
 
+export async function ingestHtml(rawHtml) {
+  return parseHtml(rawHtml);
+}
+
 export async function ingestUrl(url) {
   const response = await axios.get(url, {
     headers: { 'User-Agent': 'ClientCMS-Ingest/1.0' },
@@ -37,6 +41,10 @@ export async function ingestUrl(url) {
   });
 
   const html = response.data;
+  return parseHtml(html);
+}
+
+function parseHtml(html) {
   const $ = cheerio.load(html);
 
   const contentMap = {};

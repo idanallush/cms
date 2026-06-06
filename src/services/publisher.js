@@ -1,8 +1,14 @@
 import { renderTemplate } from './template.js';
 import * as store from '../storage/index.js';
 
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_API = 'https://api.vercel.com';
+
+async function getVercelConfig() {
+  const settings = await store.getAllSettings();
+  const token = settings.vercel_token || process.env.VERCEL_TOKEN;
+  const teamId = settings.vercel_team_id || process.env.VERCEL_TEAM_ID || null;
+  return { token, teamId };
+}
 
 /**
  * Generate clean HTML for publishing (no editor attributes)
@@ -52,8 +58,9 @@ function escapeAttr(str) {
  * Deploy site to Vercel via API v13
  */
 export async function publishToVercel(siteId) {
+  const { token: VERCEL_TOKEN, teamId } = await getVercelConfig();
   if (!VERCEL_TOKEN) {
-    throw new Error('VERCEL_TOKEN not configured');
+    throw new Error('VERCEL_TOKEN not configured. Add one in the Config panel.');
   }
 
   const meta = await store.getMeta(siteId);

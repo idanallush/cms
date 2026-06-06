@@ -108,3 +108,31 @@ export async function updateMeta(siteId, updates) {
   await saveMeta(siteId, updated);
   return updated;
 }
+
+// Settings (file-based fallback)
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+async function loadSettings() {
+  if (!existsSync(SETTINGS_FILE)) return {};
+  return JSON.parse(await readFile(SETTINGS_FILE, 'utf-8'));
+}
+
+async function saveSettings(settings) {
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+}
+
+export async function getSetting(key) {
+  const settings = await loadSettings();
+  return settings[key] || null;
+}
+
+export async function setSetting(key, value) {
+  const settings = await loadSettings();
+  settings[key] = value;
+  await saveSettings(settings);
+}
+
+export async function getAllSettings() {
+  return loadSettings();
+}

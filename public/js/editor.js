@@ -1,5 +1,11 @@
 (function () {
-  const siteId = window.location.pathname.split('/editor/')[1];
+  // Support both /editor/?site=xxx and /editor/:siteId
+  const params = new URLSearchParams(window.location.search);
+  let siteId = params.get('site');
+  if (!siteId) {
+    const pathMatch = window.location.pathname.match(/\/editor\/([^/?]+)/);
+    siteId = pathMatch ? pathMatch[1] : null;
+  }
   if (!siteId) return;
 
   const API = `/api/sites/${siteId}`;
@@ -11,7 +17,6 @@
   const btnSave = document.getElementById('btn-save');
   const saveBadge = document.getElementById('save-badge');
   const btnHistory = document.getElementById('btn-history');
-  const btnPreview = document.getElementById('btn-preview');
   const btnPublish = document.getElementById('btn-publish');
   const btnChat = document.getElementById('btn-chat');
   const changesIndicator = document.getElementById('changes-indicator');
@@ -96,6 +101,18 @@
     }
   });
 
+  // ── Responsive preview ──
+
+  document.querySelectorAll('.resp-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.resp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const width = btn.dataset.width;
+      iframe.style.maxWidth = width;
+      iframe.style.margin = width === '100%' ? '0' : '0 auto';
+    });
+  });
+
   // ── Load site metadata ──
 
   async function loadMeta() {
@@ -143,7 +160,7 @@
       }
       .slot-tooltip {
         position: absolute;
-        background: #1a1a2e;
+        background: #111;
         color: #fff;
         font-size: 11px;
         padding: 3px 8px;
@@ -158,17 +175,12 @@
 
     let tooltip = null;
 
-    function showTooltip(el, text, e) {
+    function showTooltip(el, text) {
       removeTooltip();
       tooltip = doc.createElement('div');
       tooltip.className = 'slot-tooltip';
       tooltip.textContent = text;
       doc.body.appendChild(tooltip);
-      positionTooltip(el);
-    }
-
-    function positionTooltip(el) {
-      if (!tooltip) return;
       const rect = el.getBoundingClientRect();
       tooltip.style.left = rect.left + 'px';
       tooltip.style.top = (rect.top - 24) + 'px';
@@ -187,8 +199,8 @@
       const slotType = el.getAttribute('data-slot-type');
       const slotIds = el.getAttribute('data-slot-id').split(',');
 
-      el.addEventListener('mouseenter', (e) => {
-        showTooltip(el, slotType, e);
+      el.addEventListener('mouseenter', () => {
+        showTooltip(el, slotType);
       });
 
       el.addEventListener('mouseleave', () => {
@@ -353,8 +365,6 @@
     activePopoverTarget = null;
   }
 
-  // ── Close popovers on outside click ──
-
   document.addEventListener('click', (e) => {
     if (!popoverImage.classList.contains('hidden') &&
         !popoverImage.contains(e.target)) {
@@ -444,7 +454,6 @@
   btnPublish.addEventListener('click', async () => {
     if (publishing) return;
 
-    // Warn if there are unsaved changes
     if (Object.keys(pendingChanges).length > 0) {
       if (!confirm('You have unsaved changes. Save first before publishing?')) return;
       btnSave.click();
@@ -489,9 +498,7 @@
       if (data.published && data.publishUrl) {
         showPublishBar(data.publishUrl);
       }
-    } catch {
-      // Ignore errors loading publish status
-    }
+    } catch {}
   }
 
   // ── AI Chat ──
@@ -536,13 +543,11 @@
         addChatMessage(data.message, 'ai');
 
         if (data.applied && Object.keys(data.changes).length > 0) {
-          // Apply AI changes as pending changes
           for (const [slotId, newValue] of Object.entries(data.changes)) {
             if (contentMap[slotId]) {
               const oldValue = contentMap[slotId].value;
               addPendingChange(slotId, oldValue, newValue);
 
-              // Update visual in iframe
               const doc = iframe.contentDocument;
               if (doc) {
                 const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
@@ -595,13 +600,13 @@
   });
 
   async function loadVersions() {
-    historyList.innerHTML = '<p style="color:#7b7b9e;padding:12px;font-size:13px;">Loading...</p>';
+    historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:13px;">Loading...</p>';
     try {
       const res = await fetch(`${API}/versions`);
       const { versions } = await res.json();
 
       if (versions.length === 0) {
-        historyList.innerHTML = '<p style="color:#7b7b9e;padding:12px;font-size:13px;">No versions yet</p>';
+        historyList.innerHTML = '<p style="color:#888;padding:12px;font-size:13px;">No versions yet</p>';
         return;
       }
 
@@ -610,15 +615,7 @@
         const item = document.createElement('div');
         item.className = 'history-item';
 
-        const timestamp = v.replace(/-/g, (m, offset) => {
-          if (offset === 4 || offset === 7) return '-';
-          if (offset === 10) return 'T';
-          if (offset === 13 || offset === 16) return ':';
-          if (offset === 19) return '.';
-          return m;
-        });
-
-        const timeDisplay = formatDate(timestamp);
+        const timeDisplay = formatDate(v);
 
         item.innerHTML = `
           <div class="history-item-time">${i === 0 ? timeDisplay + ' (latest)' : timeDisplay}</div>
@@ -653,14 +650,21 @@
           }
         });
       });
-    } catch (err) {
-      historyList.innerHTML = `<p style="color:#e74c3c;padding:12px;font-size:13px;">Failed to load versions</p>`;
+    } catch {
+      historyList.innerHTML = '<p style="color:#ef4444;padding:12px;font-size:13px;">Failed to load versions</p>';
     }
   }
 
   function formatDate(isoStr) {
     try {
-      const d = new Date(isoStr);
+      const cleaned = isoStr.replace(/-/g, (m, offset) => {
+        if (offset === 4 || offset === 7) return '-';
+        if (offset === 10) return 'T';
+        if (offset === 13 || offset === 16) return ':';
+        if (offset === 19) return '.';
+        return m;
+      });
+      const d = new Date(cleaned);
       if (isNaN(d.getTime())) return isoStr;
       return d.toLocaleString();
     } catch {
@@ -668,16 +672,89 @@
     }
   }
 
-  // ── Preview ──
+  // ── Onboarding ──
 
-  btnPreview.addEventListener('click', () => {
-    window.open(`${API}/preview`, '_blank');
-  });
+  const onboardingSteps = [
+    {
+      title: 'Click anything to edit',
+      desc: 'Hover any text, button or image — then click it and just type. Changes preview instantly.',
+      target: '#site-iframe',
+    },
+    {
+      title: 'Check every screen',
+      desc: 'Preview your site on desktop, tablet and mobile before you publish.',
+      target: '#responsive-btns',
+    },
+    {
+      title: 'Or just ask',
+      desc: 'Describe what you want changed in plain English. The AI does it, the Guardian checks it.',
+      target: '#btn-chat',
+    },
+    {
+      title: 'Save, then Publish',
+      desc: 'Save keeps your edits as a draft. Publish pushes it live. Made a mistake? Roll back any version anytime.',
+      target: '#btn-save',
+    },
+  ];
+
+  function showOnboarding() {
+    const storageKey = `onboarding_done_${siteId}`;
+    if (localStorage.getItem(storageKey)) return;
+
+    let step = 0;
+    const overlay = document.getElementById('onboarding-overlay');
+    const tooltip = document.getElementById('onboarding-tooltip');
+    const titleEl = document.getElementById('onboarding-title');
+    const descEl = document.getElementById('onboarding-desc');
+    const dotsEl = document.getElementById('onboarding-dots');
+    const skipBtn = document.getElementById('onboarding-skip');
+    const nextBtn = document.getElementById('onboarding-next');
+
+    function renderStep() {
+      const s = onboardingSteps[step];
+      titleEl.textContent = s.title;
+      descEl.textContent = s.desc;
+      nextBtn.innerHTML = step === onboardingSteps.length - 1 ? 'Got it' : 'Next &rarr;';
+
+      dotsEl.innerHTML = onboardingSteps.map((_, i) =>
+        `<span class="ob-dot ${i === step ? 'active' : ''}"></span>`
+      ).join('');
+
+      // Position tooltip near target
+      const target = document.querySelector(s.target);
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        tooltip.style.top = (rect.bottom + 12) + 'px';
+        tooltip.style.left = Math.max(16, Math.min(rect.left, window.innerWidth - 320)) + 'px';
+      }
+    }
+
+    function finish() {
+      overlay.classList.add('hidden');
+      localStorage.setItem(storageKey, 'true');
+    }
+
+    overlay.classList.remove('hidden');
+    renderStep();
+
+    nextBtn.addEventListener('click', () => {
+      step++;
+      if (step >= onboardingSteps.length) {
+        finish();
+      } else {
+        renderStep();
+      }
+    });
+
+    skipBtn.addEventListener('click', finish);
+  }
 
   // ── Iframe load handler ──
 
   iframe.addEventListener('load', () => {
     injectEditorScript();
+    // Show onboarding after first load
+    setTimeout(showOnboarding, 500);
   });
 
   // ── Init ──

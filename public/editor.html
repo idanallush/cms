@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Editor - Client CMS</title>
+  <title>Editor - AI CMS</title>
   <link rel="stylesheet" href="/css/editor.css">
 </head>
 <body>
@@ -16,6 +16,11 @@
       <span id="changes-indicator" class="changes-indicator hidden">0 unsaved changes</span>
     </div>
     <div class="toolbar-right">
+      <div class="responsive-btns" id="responsive-btns">
+        <button class="resp-btn active" data-width="100%" title="Desktop">&#128421;</button>
+        <button class="resp-btn" data-width="768px" title="Tablet">&#128241;</button>
+        <button class="resp-btn" data-width="375px" title="Mobile">&#128242;</button>
+      </div>
       <button id="btn-chat" class="toolbar-btn btn-ai" title="AI Chat">AI</button>
       <button id="btn-save" class="toolbar-btn btn-primary" disabled>
         Save
@@ -23,7 +28,6 @@
       </button>
       <button id="btn-publish" class="toolbar-btn btn-publish">Publish</button>
       <button id="btn-history" class="toolbar-btn btn-secondary">History</button>
-      <button id="btn-preview" class="toolbar-btn btn-secondary">Preview</button>
     </div>
   </div>
 
@@ -87,6 +91,21 @@
     <div class="popover-actions">
       <button id="popover-link-apply" class="toolbar-btn btn-primary">Apply</button>
       <button id="popover-link-cancel" class="toolbar-btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Onboarding Tooltips -->
+  <div id="onboarding-overlay" class="onboarding-overlay hidden">
+    <div id="onboarding-tooltip" class="onboarding-tooltip">
+      <h4 id="onboarding-title"></h4>
+      <p id="onboarding-desc"></p>
+      <div class="onboarding-footer">
+        <div class="onboarding-dots" id="onboarding-dots"></div>
+        <div class="onboarding-btns">
+          <button id="onboarding-skip" class="btn-onboard-skip">Skip</button>
+          <button id="onboarding-next" class="btn-onboard-next">Next &rarr;</button>
+        </div>
+      </div>
     </div>
   </div>
 
