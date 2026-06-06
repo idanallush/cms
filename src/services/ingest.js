@@ -165,31 +165,113 @@ function convertAllUrlsToAbsolute($, pageUrl) {
   });
 }
 
-// ── Force visibility (override scroll animations) ──
+// ── Force visibility (targeted, not global) ──
 
 function forceAllVisible($) {
   const forceVisibleCSS = `
 <style data-cms-override="true">
-  *, *::before, *::after {
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: none !important;
-    transition: none !important;
-    animation: none !important;
-    animation-delay: 0s !important;
-    animation-duration: 0s !important;
-    clip-path: none !important;
-    -webkit-clip-path: none !important;
-    will-change: auto !important;
-  }
-  [data-aos], [data-animate], [data-animation],
-  .aos-init, .wow, .animated,
+  /* Target ONLY animation-related hidden elements */
+  [data-aos],
+  [data-animate],
+  [data-animation],
+  [data-scroll],
+  [data-sr],
+  .aos-init,
+  .aos-animate,
+  .wow,
+  .animated,
   .elementor-invisible,
-  [class*="fade"], [class*="slide"],
-  [class*="reveal"] {
+  .elementor-widget,
+  [class*="aos-"],
+  [class*="fade-"],
+  [class*="slide-"],
+  [class*="zoom-"],
+  [class*="reveal"],
+  section,
+  article,
+  div[class*="section"],
+  div[class*="block"],
+  div[class*="row"],
+  div[class*="col"],
+  div[class*="container"],
+  div[class*="wrapper"],
+  div[class*="hero"],
+  div[class*="feature"],
+  div[class*="content"],
+  div[class*="about"],
+  div[class*="service"],
+  div[class*="testimonial"],
+  div[class*="pricing"],
+  div[class*="contact"],
+  div[class*="footer"],
+  div[class*="header"],
+  div[class*="banner"],
+  div[class*="card"],
+  div[class*="grid"],
+  div[class*="gallery"],
+  div[class*="team"],
+  div[class*="faq"],
+  div[class*="cta"],
+  main, header, footer, nav,
+  h1, h2, h3, h4, h5, h6,
+  p, img, a, button, ul, ol, li,
+  figure, figcaption, picture {
     opacity: 1 !important;
     visibility: visible !important;
     transform: none !important;
+  }
+
+  /* Disable all animations and transitions globally */
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+
+  /* HIDE common overlays, modals, popups, cookie banners */
+  [class*="cookie"],
+  [class*="consent"],
+  [class*="gdpr"],
+  [class*="popup"],
+  [class*="modal"],
+  [class*="lightbox"],
+  [class*="overlay"][class*="fixed"],
+  [class*="loading-screen"],
+  [class*="preloader"],
+  [class*="loader"],
+  [class*="splash"],
+  [id*="cookie"],
+  [id*="consent"],
+  [id*="gdpr"],
+  [id*="popup"],
+  [id*="modal"],
+  [id*="overlay"],
+  [id*="preloader"],
+  [id*="loader"],
+  .modal-backdrop,
+  .overlay-backdrop,
+  .cookie-banner,
+  .cookie-notice,
+  .cc-window,
+  .cc-banner,
+  #onetrust-banner-sdk,
+  #onetrust-consent-sdk,
+  .osano-cm-window,
+  [aria-modal="true"],
+  dialog[open],
+  div[role="dialog"],
+  div[role="alertdialog"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* Hide fixed-position overlays that cover the whole page */
+  body > div[style*="position: fixed"][style*="z-index"],
+  body > div[style*="position:fixed"][style*="z-index"] {
+    display: none !important;
   }
 </style>`;
 
@@ -200,17 +282,37 @@ function forceAllVisible($) {
   }
 }
 
+function removeOverlaysAndPopups($) {
+  // Cookie consent elements
+  $('[class*="cookie-consent"], [class*="cookie-banner"], [class*="cookie-notice"]').remove();
+  $('[id*="cookie-consent"], [id*="cookie-banner"], [id*="gdpr"]').remove();
+  $('.cc-window, .cc-banner, #onetrust-banner-sdk, #onetrust-consent-sdk').remove();
+  $('.osano-cm-window').remove();
+
+  // Modal backdrops
+  $('.modal-backdrop, .overlay-backdrop').remove();
+
+  // Preloaders/loading screens
+  $('[class*="preloader"], [class*="loading-screen"], [id*="preloader"]').remove();
+}
+
 function removeAnimationScripts($) {
   $('script').each((i, el) => {
     const src = ($(el).attr('src') || '').toLowerCase();
     const content = $(el).html() || '';
-    // Remove AOS (Animate On Scroll)
+    // AOS
     if (src.includes('aos.js') || src.includes('aos.min.js') || content.includes('AOS.init')) {
       $(el).remove();
       return;
     }
-    // Remove WOW.js
+    // WOW.js
     if (src.includes('wow.js') || src.includes('wow.min.js') || content.includes('new WOW')) {
+      $(el).remove();
+      return;
+    }
+    // Cookie/consent scripts
+    if (src.includes('cookie') || src.includes('consent') || src.includes('gdpr') ||
+        src.includes('onetrust') || src.includes('osano') || src.includes('cookiebot')) {
       $(el).remove();
       return;
     }
@@ -272,13 +374,16 @@ function parseHtml(html, pageUrl) {
   // Step 1: Convert all relative URLs to absolute
   convertAllUrlsToAbsolute($, pageUrl);
 
-  // Step 2: Force all elements visible (override scroll animations for editor)
+  // Step 2: Remove overlays, popups, cookie banners
+  removeOverlaysAndPopups($);
+
+  // Step 3: Force animation-related elements visible (targeted, not global)
   forceAllVisible($);
 
-  // Step 3: Remove animation scripts that interfere with editing
+  // Step 4: Remove animation and cookie scripts
   removeAnimationScripts($);
 
-  // Step 4: Fix lazy-loaded images
+  // Step 5: Fix lazy-loaded images
   fixLazyLoadedImages($, pageUrl);
 
   const contentMap = {};

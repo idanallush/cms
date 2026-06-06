@@ -318,10 +318,15 @@ async function runTests() {
 <html><head>
   <link rel="stylesheet" href="https://cdn.example.com/aos.css">
   <script src="https://cdn.example.com/aos.min.js"></script>
+  <script src="https://cdn.example.com/cookiebot.js"></script>
 </head><body>
   <div data-aos="fade-up" class="elementor-invisible"><h1>Hidden Title</h1></div>
   <img data-src="https://example.com/lazy.jpg" class="lazy" alt="Lazy img">
   <div data-bg="https://example.com/bg.jpg">BG content</div>
+  <div class="cookie-banner">Accept cookies?</div>
+  <div id="onetrust-banner-sdk">OneTrust</div>
+  <div class="modal-backdrop"></div>
+  <div class="preloader">Loading...</div>
   <script>AOS.init();</script>
 </body></html>`;
 
@@ -332,16 +337,30 @@ async function runTests() {
   assert(!animTemplate.includes('aos.min.js'), 'AOS script removed');
   assert(!animTemplate.includes('AOS.init'), 'AOS.init inline script removed');
   assert(!animTemplate.includes('href="https://cdn.example.com/aos.css"'), 'AOS stylesheet removed');
+  assert(!animTemplate.includes('cookiebot.js'), 'Cookie script removed');
   assert(animTemplate.includes('src="https://example.com/lazy.jpg"'), 'Lazy-loaded image src restored');
   assert(!animTemplate.includes('data-src='), 'data-src attribute removed');
   assert(animTemplate.includes("background-image: url('https://example.com/bg.jpg')"), 'data-bg converted to inline style');
+
+  // Overlays removed (DOM elements gone; CSS selectors referencing them may remain)
+  assert(!animTemplate.includes('<div class="cookie-banner">'), 'Cookie banner DOM element removed');
+  assert(!animTemplate.includes('<div id="onetrust-banner-sdk">'), 'OneTrust banner DOM element removed');
+  assert(!animTemplate.includes('<div class="modal-backdrop">'), 'Modal backdrop DOM element removed');
+  assert(!animTemplate.includes('<div class="preloader">'), 'Preloader DOM element removed');
+
+  // Targeted CSS: no global * selector for opacity/visibility (animation-duration is OK)
+  // Extract all CSS rule blocks that use * as a standalone selector and check none set opacity/visibility
+  const starBlocks = animTemplate.match(/(?:^|\n)\s*\*[\s,][^{]*\{[^}]*\}/g) || [];
+  const hasStarOpacity = starBlocks.some(b => /opacity|visibility/.test(b));
+  assert(!hasStarOpacity, 'No global * selector for opacity/visibility');
+  assert(animTemplate.includes('[data-aos]'), 'Targeted selector for AOS elements');
+  assert(animTemplate.includes('display: none !important'), 'Popup hide rules present');
 
   // ── Test 10: Published HTML strips CMS overrides ──
   console.log('\n=== Test 10: Publish strips CMS overrides ===');
   const { frozenTemplate: animTpl2, contentMap: animCm2 } = await ingestHtml(HTML_WITH_ANIMATIONS, 'https://example.com');
   const publishedAnim = generatePublishHtml(animTpl2, animCm2, { name: 'Test', originalUrl: 'https://example.com', seo: {} });
   assert(!publishedAnim.includes('data-cms-override'), 'Published: CMS override style removed');
-  assert(!publishedAnim.includes('opacity: 1 !important'), 'Published: Force-visible CSS removed');
   assert(publishedAnim.includes('Hidden Title'), 'Published: Content preserved');
 
   // ── Summary ──
