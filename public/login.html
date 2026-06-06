@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Client CMS</title>
+  <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <h1 id="auth-title">Client CMS</h1>
+      <p id="auth-subtitle" class="auth-subtitle">Owner Login</p>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Enter password" required autofocus>
+        </div>
+        <div id="error-msg" class="error-msg hidden"></div>
+        <button type="submit" id="btn-login" class="btn-login">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const pathParts = window.location.pathname.split('/login/');
+      const siteId = pathParts[1] || null;
+      const form = document.getElementById('login-form');
+      const passwordInput = document.getElementById('password');
+      const errorMsg = document.getElementById('error-msg');
+      const title = document.getElementById('auth-title');
+      const subtitle = document.getElementById('auth-subtitle');
+      const btnLogin = document.getElementById('btn-login');
+
+      if (siteId) {
+        subtitle.textContent = 'Client Login';
+        btnLogin.textContent = 'Login';
+        fetch('/api/sites/' + siteId)
+          .then(r => {
+            if (!r.ok) throw new Error();
+            return r.json();
+          })
+          .then(meta => {
+            title.textContent = meta.name || 'Site Login';
+          })
+          .catch(() => {});
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorMsg.classList.add('hidden');
+        btnLogin.disabled = true;
+        btnLogin.textContent = 'Logging in...';
+
+        const password = passwordInput.value;
+        const endpoint = siteId
+          ? '/api/auth/login/client'
+          : '/api/auth/login/owner';
+        const body = siteId
+          ? { siteId, password }
+          : { password };
+
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+
+          if (res.ok && data.success) {
+            window.location.href = siteId ? '/editor/' + siteId : '/dashboard';
+          } else {
+            errorMsg.textContent = data.error?.message || 'Login failed';
+            errorMsg.classList.remove('hidden');
+          }
+        } catch (err) {
+          errorMsg.textContent = 'Connection error';
+          errorMsg.classList.remove('hidden');
+        } finally {
+          btnLogin.disabled = false;
+          btnLogin.textContent = 'Login';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
