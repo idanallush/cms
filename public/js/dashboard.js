@@ -169,7 +169,7 @@
         sitesGrid.appendChild(card);
       }
     } catch (err) {
-      sitesGrid.innerHTML = '<p class="loading-text" style="color:#ef4444;">Failed to load sites</p>';
+      sitesGrid.innerHTML = '<p class="loading-text" style="color:#999999;">Failed to load sites</p>';
     }
   }
 

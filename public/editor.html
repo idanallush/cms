@@ -261,19 +261,10 @@
     <a id="publish-link" href="#" target="_blank" rel="noopener" class="hidden">View live site</a>
   </div>
 
-  <!-- Onboarding Tooltips -->
-  <div id="onboarding-overlay" class="onboarding-overlay hidden">
-    <div id="onboarding-tooltip" class="onboarding-tooltip">
-      <h4 id="onboarding-title"></h4>
-      <p id="onboarding-desc"></p>
-      <div class="onboarding-footer">
-        <div class="onboarding-dots" id="onboarding-dots"></div>
-        <div class="onboarding-btns">
-          <button id="onboarding-skip" class="btn-onboard-skip">Skip</button>
-          <button id="onboarding-next" class="btn-onboard-next">Next &rarr;</button>
-        </div>
-      </div>
-    </div>
+  <!-- Welcome banner (non-blocking) -->
+  <div id="welcome-banner" class="welcome-banner hidden">
+    <span class="welcome-text">Click any element in the preview to edit it. Use the right panel to adjust content and styles.</span>
+    <button id="welcome-dismiss" class="welcome-dismiss">&times;</button>
   </div>
 
   <script src="/js/editor.js"></script>

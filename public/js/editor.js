@@ -226,16 +226,16 @@
         outline-offset: 2px;
       }
       [data-slot-id]:hover {
-        outline: 2px dashed rgba(74, 108, 247, 0.5) !important;
-        box-shadow: inset 0 0 0 1px rgba(74, 108, 247, 0.1);
+        outline: 2px dashed rgba(59, 130, 246, 0.5) !important;
+        box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1);
       }
       [data-slot-id].slot-selected {
-        outline: 2px solid #4a6cf7 !important;
+        outline: 2px solid #3b82f6 !important;
         outline-offset: 2px;
       }
       .slot-label {
         position: absolute;
-        background: #4a6cf7;
+        background: #3b82f6;
         color: #fff;
         font-size: 10px;
         padding: 2px 6px;
@@ -956,7 +956,7 @@
         });
       });
     } catch {
-      historyList.innerHTML = '<p style="color:#ef4444;padding:12px;font-size:12px;">Failed to load versions</p>';
+      historyList.innerHTML = '<p style="color:#999999;padding:12px;font-size:12px;">Failed to load versions</p>';
     }
   }
 
@@ -977,85 +977,33 @@
     }
   }
 
-  // ── Onboarding ──
-  const onboardingSteps = [
-    {
-      title: 'Click anything to edit',
-      desc: 'Click any element in the preview. Its properties appear in the right panel where you can edit content and adjust styles.',
-      target: '#site-iframe',
-    },
-    {
-      title: 'Preview every screen',
-      desc: 'Switch between desktop, tablet and mobile to see how your site looks on different devices.',
-      target: '#responsive-btns',
-    },
-    {
-      title: 'Or just ask AI',
-      desc: 'Describe what you want changed in plain English. The AI does it, the Guardian validates it.',
-      target: '#btn-chat',
-    },
-    {
-      title: 'Save, then Publish',
-      desc: 'Save keeps your edits as a draft. Publish pushes it live. Made a mistake? Roll back any version.',
-      target: '#btn-save',
-    },
-  ];
-
-  function showOnboarding() {
-    const storageKey = `onboarding_done_${siteId}`;
+  // ── Welcome Banner (non-blocking) ──
+  function showWelcomeBanner() {
+    const storageKey = `welcome_done_${siteId}`;
     if (localStorage.getItem(storageKey)) return;
 
-    let step = 0;
-    const overlay = document.getElementById('onboarding-overlay');
-    const tooltip = document.getElementById('onboarding-tooltip');
-    const titleEl = document.getElementById('onboarding-title');
-    const descEl = document.getElementById('onboarding-desc');
-    const dotsEl = document.getElementById('onboarding-dots');
-    const skipBtn = document.getElementById('onboarding-skip');
-    const nextBtn = document.getElementById('onboarding-next');
+    const banner = document.getElementById('welcome-banner');
+    const dismissBtn = document.getElementById('welcome-dismiss');
+    if (!banner || !dismissBtn) return;
 
-    function renderStep() {
-      const s = onboardingSteps[step];
-      titleEl.textContent = s.title;
-      descEl.textContent = s.desc;
-      nextBtn.innerHTML = step === onboardingSteps.length - 1 ? 'Got it' : 'Next &rarr;';
+    banner.classList.remove('hidden');
 
-      dotsEl.innerHTML = onboardingSteps.map((_, i) =>
-        `<span class="ob-dot ${i === step ? 'active' : ''}"></span>`
-      ).join('');
-
-      const target = document.querySelector(s.target);
-      if (target) {
-        const rect = target.getBoundingClientRect();
-        tooltip.style.top = (rect.bottom + 12) + 'px';
-        tooltip.style.left = Math.max(16, Math.min(rect.left, window.innerWidth - 300)) + 'px';
-      }
-    }
-
-    function finish() {
-      overlay.classList.add('hidden');
+    dismissBtn.addEventListener('click', () => {
+      banner.classList.add('hidden');
       localStorage.setItem(storageKey, 'true');
-    }
-
-    overlay.classList.remove('hidden');
-    renderStep();
-
-    nextBtn.addEventListener('click', () => {
-      step++;
-      if (step >= onboardingSteps.length) {
-        finish();
-      } else {
-        renderStep();
-      }
     });
 
-    skipBtn.addEventListener('click', finish);
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => {
+      banner.classList.add('hidden');
+      localStorage.setItem(storageKey, 'true');
+    }, 10000);
   }
 
   // ── Iframe load handler ──
   iframe.addEventListener('load', () => {
     injectEditorScript();
-    setTimeout(showOnboarding, 500);
+    setTimeout(showWelcomeBanner, 500);
   });
 
   // ── Init ──

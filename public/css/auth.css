@@ -73,7 +73,7 @@ body {
 }
 
 .form-group input:focus {
-  border-color: #4a6cf7;
+  border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(74, 108, 247, 0.1);
 }
 
@@ -82,7 +82,7 @@ body {
 }
 
 .error-msg {
-  color: #ef4444;
+  color: #999999;
   font-size: 13px;
   margin-bottom: 12px;
 }

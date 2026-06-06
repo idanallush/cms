@@ -78,8 +78,8 @@ body {
 }
 
 .status-dot.active {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
 /* Dashboard */
@@ -210,13 +210,13 @@ body {
 }
 
 .badge-green {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
 .badge-yellow {
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
 }
 
 /* Inputs */
@@ -233,7 +233,7 @@ body {
 }
 
 .input:focus {
-  border-color: #4a6cf7;
+  border-color: #3b82f6;
 }
 
 .input::placeholder {
@@ -278,7 +278,7 @@ body {
 }
 
 .ingest-status.error {
-  color: #ef4444;
+  color: #999999;
 }
 
 /* Sites grid */
@@ -386,13 +386,13 @@ body {
 }
 
 .status-live {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
 .status-password-set {
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
 }
 
 .site-card-meta {
@@ -434,7 +434,7 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #22c55e;
+  background: #3b82f6;
 }
 
 /* Expandable sections */
@@ -515,13 +515,13 @@ body {
 }
 
 .checkbox-row input[type="checkbox"] {
-  accent-color: #4a6cf7;
+  accent-color: #3b82f6;
 }
 
 /* Buttons */
 .btn-primary {
   padding: 8px 16px;
-  background: #4a6cf7;
+  background: #3b82f6;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -533,7 +533,7 @@ body {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #3d5ce0;
+  background: #2563eb;
 }
 
 .btn-primary:disabled {
@@ -562,12 +562,12 @@ body {
 }
 
 .btn-green {
-  background: #22c55e;
+  background: #3b82f6;
   color: #fff;
 }
 
 .btn-green:hover {
-  background: #16a34a;
+  background: #2563eb;
 }
 
 /* Toast */
@@ -592,8 +592,8 @@ body {
   max-width: 360px;
 }
 
-.toast-success { background: #22c55e; }
-.toast-error { background: #ef4444; }
+.toast-success { background: #3b82f6; }
+.toast-error { background: #333333; }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(40px); }
