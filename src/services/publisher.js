@@ -19,6 +19,9 @@ export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
   $('[data-slot-id]').removeAttr('data-slot-id');
   $('[data-slot-type]').removeAttr('data-slot-type');
 
+  // Remove CMS override styles (restore original animations for published site)
+  $('style[data-cms-override="true"]').remove();
+
   // Inject SEO meta tags
   const seoBlock = buildSeoBlock(meta);
   if (seoBlock) {

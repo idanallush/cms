@@ -165,6 +165,92 @@ function convertAllUrlsToAbsolute($, pageUrl) {
   });
 }
 
+// ── Force visibility (override scroll animations) ──
+
+function forceAllVisible($) {
+  const forceVisibleCSS = `
+<style data-cms-override="true">
+  *, *::before, *::after {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    will-change: auto !important;
+  }
+  [data-aos], [data-animate], [data-animation],
+  .aos-init, .wow, .animated,
+  .elementor-invisible,
+  [class*="fade"], [class*="slide"],
+  [class*="reveal"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+  }
+</style>`;
+
+  if ($('head').length) {
+    $('head').append(forceVisibleCSS);
+  } else if ($('body').length) {
+    $('body').append(forceVisibleCSS);
+  }
+}
+
+function removeAnimationScripts($) {
+  $('script').each((i, el) => {
+    const src = ($(el).attr('src') || '').toLowerCase();
+    const content = $(el).html() || '';
+    // Remove AOS (Animate On Scroll)
+    if (src.includes('aos.js') || src.includes('aos.min.js') || content.includes('AOS.init')) {
+      $(el).remove();
+      return;
+    }
+    // Remove WOW.js
+    if (src.includes('wow.js') || src.includes('wow.min.js') || content.includes('new WOW')) {
+      $(el).remove();
+      return;
+    }
+  });
+
+  // Remove AOS stylesheet
+  $('link[href*="aos"]').remove();
+}
+
+function fixLazyLoadedImages($, pageUrl) {
+  $('img').each((i, el) => {
+    const $el = $(el);
+    // Convert data-src / data-lazy-src to src
+    const dataSrc = $el.attr('data-src') || $el.attr('data-lazy-src');
+    if (dataSrc && !$el.attr('src')) {
+      $el.attr('src', makeAbsolute(dataSrc, pageUrl));
+    }
+    // Remove lazy loading attribute
+    $el.removeAttr('loading');
+    $el.removeAttr('data-src');
+    $el.removeAttr('data-lazy-src');
+    // Remove lazy classes
+    const cls = $el.attr('class') || '';
+    if (cls.includes('lazy')) {
+      $el.attr('class', cls.replace(/\blazy\b/g, '').replace(/\blazyload\b/g, '').trim());
+    }
+  });
+
+  // Convert data-bg to inline background-image
+  $('[data-bg]').each((i, el) => {
+    const $el = $(el);
+    const bg = $el.attr('data-bg');
+    if (bg) {
+      const currentStyle = $el.attr('style') || '';
+      const separator = currentStyle && !currentStyle.endsWith(';') ? ';' : '';
+      $el.attr('style', currentStyle + separator + ` background-image: url('${makeAbsolute(bg, pageUrl)}') !important;`);
+    }
+  });
+}
+
 export async function ingestHtml(rawHtml, sourceUrl) {
   return parseHtml(rawHtml, sourceUrl || 'pasted-html');
 }
@@ -185,6 +271,15 @@ function parseHtml(html, pageUrl) {
 
   // Step 1: Convert all relative URLs to absolute
   convertAllUrlsToAbsolute($, pageUrl);
+
+  // Step 2: Force all elements visible (override scroll animations for editor)
+  forceAllVisible($);
+
+  // Step 3: Remove animation scripts that interfere with editing
+  removeAnimationScripts($);
+
+  // Step 4: Fix lazy-loaded images
+  fixLazyLoadedImages($, pageUrl);
 
   const contentMap = {};
   let slotCounter = 0;

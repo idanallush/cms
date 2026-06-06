@@ -312,6 +312,38 @@ async function runTests() {
   const { frozenTemplate: pastedTemplate } = await ingestHtml(HTML_WITH_RELATIVE);
   assert(pastedTemplate.includes('href="/css/main.css"'), 'Pasted HTML: relative URLs kept as-is');
 
+  // ── Test 9: Force-visible CSS and animation removal ──
+  console.log('\n=== Test 9: Animation overrides ===');
+  const HTML_WITH_ANIMATIONS = `<!DOCTYPE html>
+<html><head>
+  <link rel="stylesheet" href="https://cdn.example.com/aos.css">
+  <script src="https://cdn.example.com/aos.min.js"></script>
+</head><body>
+  <div data-aos="fade-up" class="elementor-invisible"><h1>Hidden Title</h1></div>
+  <img data-src="https://example.com/lazy.jpg" class="lazy" alt="Lazy img">
+  <div data-bg="https://example.com/bg.jpg">BG content</div>
+  <script>AOS.init();</script>
+</body></html>`;
+
+  const { frozenTemplate: animTemplate } = await ingestHtml(HTML_WITH_ANIMATIONS, 'https://example.com');
+
+  assert(animTemplate.includes('data-cms-override="true"'), 'Force-visible CSS injected');
+  assert(animTemplate.includes('opacity: 1 !important'), 'Force-visible includes opacity override');
+  assert(!animTemplate.includes('aos.min.js'), 'AOS script removed');
+  assert(!animTemplate.includes('AOS.init'), 'AOS.init inline script removed');
+  assert(!animTemplate.includes('href="https://cdn.example.com/aos.css"'), 'AOS stylesheet removed');
+  assert(animTemplate.includes('src="https://example.com/lazy.jpg"'), 'Lazy-loaded image src restored');
+  assert(!animTemplate.includes('data-src='), 'data-src attribute removed');
+  assert(animTemplate.includes("background-image: url('https://example.com/bg.jpg')"), 'data-bg converted to inline style');
+
+  // ── Test 10: Published HTML strips CMS overrides ──
+  console.log('\n=== Test 10: Publish strips CMS overrides ===');
+  const { frozenTemplate: animTpl2, contentMap: animCm2 } = await ingestHtml(HTML_WITH_ANIMATIONS, 'https://example.com');
+  const publishedAnim = generatePublishHtml(animTpl2, animCm2, { name: 'Test', originalUrl: 'https://example.com', seo: {} });
+  assert(!publishedAnim.includes('data-cms-override'), 'Published: CMS override style removed');
+  assert(!publishedAnim.includes('opacity: 1 !important'), 'Published: Force-visible CSS removed');
+  assert(publishedAnim.includes('Hidden Title'), 'Published: Content preserved');
+
   // ── Summary ──
   console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
   if (failed > 0) process.exit(1);
