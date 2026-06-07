@@ -361,7 +361,8 @@
       });
     });
 
-    // Single capture-phase click handler — fires before ANY page JS
+    // Capture-phase click handler — intercepts ONLY clicks on editable slots.
+    // Non-slot clicks (tab buttons, carousel arrows, accordion toggles) pass through.
     doc.addEventListener('click', (e) => {
       if (editorMode !== 'edit') return;
 
@@ -374,10 +375,18 @@
         const slotType = target.getAttribute('data-slot-type');
         const slotIds = target.getAttribute('data-slot-id').split(',');
         selectSlot(target, slotType, slotIds);
-      } else {
+      }
+      // If NOT a slot element — do nothing, let the click pass through
+      // so tab buttons, carousel arrows, accordion toggles work normally
+    }, true); // CAPTURE phase
+
+    // Bubble-phase handler for click-outside-to-deselect
+    doc.addEventListener('click', (e) => {
+      if (editorMode !== 'edit') return;
+      if (!e.target.closest('[data-slot-id]')) {
         deselectSlot();
       }
-    }, true); // CAPTURE phase
+    });
 
     // Set edit-mode body attribute for CSS coordination
     if (editorMode === 'edit') {

@@ -285,33 +285,10 @@ function forceAllVisible($) {
 function forceExpandHiddenContent($) {
   const forceExpandCSS = `
 <style data-cms-expand="true">
-  /* Force ALL accordion content open */
+  /* Force accordion/collapse/FAQ content open */
   details > summary ~ * { display: block !important; }
 
-  /* Force all tab panels visible */
-  [role="tabpanel"],
-  [class*="tab-pane"],
-  [class*="tab-content"] > *,
-  [class*="tab-panel"],
-  [class*="tabpanel"],
-  .tab-pane,
-  .tab-content > div,
-  .tab-content > section {
-    display: block !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
-    clip: auto !important;
-    clip-path: none !important;
-  }
-
-  /* Force all collapsed/hidden content visible */
-  [class*="collapse"]:not(.navbar-collapse),
+  [class*="collapse"]:not(.navbar-collapse):not([class*="carousel"]),
   [class*="accordion-body"],
   [class*="accordion-content"],
   [class*="accordion-panel"],
@@ -320,9 +297,8 @@ function forceExpandHiddenContent($) {
   [class*="read-more-content"],
   [class*="expandable"],
   [class*="toggled-content"],
-  [aria-hidden="true"]:not([role="dialog"]):not([aria-modal="true"]),
-  .collapse:not(.show):not(.navbar-collapse),
-  .collapsing {
+  .collapse:not(.show):not(.navbar-collapse):not([class*="carousel"]),
+  .collapsing:not([class*="carousel"]) {
     display: block !important;
     height: auto !important;
     max-height: none !important;
@@ -331,59 +307,9 @@ function forceExpandHiddenContent($) {
     visibility: visible !important;
   }
 
-  /* Force all slider/carousel slides visible */
-  [class*="swiper-slide"],
-  [class*="carousel-item"],
-  [class*="slider-slide"],
-  [class*="slick-slide"],
-  .swiper-slide,
-  .carousel-item,
-  .slick-slide {
-    display: block !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
-    transform: none !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* Make carousels/sliders stack vertically in edit mode */
-  [class*="swiper-wrapper"],
-  [class*="carousel-inner"],
-  [class*="slider-wrapper"],
-  [class*="slick-track"],
-  .swiper-wrapper,
-  .carousel-inner,
-  .slick-track {
-    display: flex !important;
-    flex-direction: column !important;
-    transform: none !important;
-    width: auto !important;
-  }
-
-  /* Force all dropdown/submenu content visible */
-  [class*="dropdown-menu"],
-  [class*="submenu"],
-  .dropdown-menu {
-    display: block !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    position: relative !important;
-  }
-
-  /* Ensure overflow doesn't hide content */
-  [style*="overflow: hidden"],
-  [style*="overflow:hidden"] {
-    overflow: visible !important;
-  }
-
-  /* Force editable elements to be clickable above any overlays */
+  /* Ensure editable elements are always clickable */
   [data-slot-id] {
     pointer-events: auto !important;
-    position: relative !important;
-    z-index: 1 !important;
     cursor: pointer !important;
   }
 
@@ -405,6 +331,18 @@ function forceExpandHiddenContent($) {
 
   // Set all <details> elements to open
   $('details').attr('open', '');
+
+  // Expand "read more" / "show more" hidden content
+  $('a, button, span').each((i, el) => {
+    const text = ($(el).text().trim() || '').toLowerCase();
+    if (text.includes('read more') || text.includes('קרא עוד') || text.includes('show more') || text.includes('הצג עוד')) {
+      const parent = $(el).parent();
+      parent.find('[style*="display: none"], [style*="display:none"]').css('display', 'block');
+      if ($(el).attr('aria-expanded') === 'false') {
+        $(el).attr('aria-expanded', 'true');
+      }
+    }
+  });
 }
 
 function removeOverlaysAndPopups($) {
