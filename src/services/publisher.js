@@ -21,6 +21,8 @@ export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
 
   // Remove CMS override styles (restore original animations for published site)
   $('style[data-cms-override="true"]').remove();
+  $('style[data-cms-expand="true"]').remove();
+  $('style[data-cms-editor="true"]').remove();
 
   // Inject SEO meta tags
   const seoBlock = buildSeoBlock(meta);

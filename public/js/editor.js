@@ -72,7 +72,12 @@
   const seoDescCount = document.getElementById('seo-desc-count');
   const seoChecks = document.getElementById('seo-checks');
 
+  // Mode toggle refs
+  const btnModeEdit = document.getElementById('btn-mode-edit');
+  const btnModePreview = document.getElementById('btn-mode-preview');
+
   // ── State ──
+  let editorMode = 'edit'; // 'edit' or 'preview'
   let contentMap = {};
   let stylesMap = {};
   let seoData = {};
@@ -83,6 +88,7 @@
   let saving = false;
   let publishing = false;
   let siteMeta = {};
+  let previewBackBtn = null;
 
   // ── Toast ──
   function showToast(message, type) {
@@ -213,12 +219,77 @@
     iframe.src = `${API}/render`;
   }
 
+  // ── Edit/Preview Mode ──
+  function switchToEditMode() {
+    editorMode = 'edit';
+    const doc = iframe.contentDocument;
+    if (doc) {
+      const expandStyle = doc.querySelector('style[data-cms-expand]');
+      if (expandStyle) expandStyle.disabled = false;
+      enableSlotInteractions(doc);
+    }
+    btnModeEdit.classList.add('active');
+    btnModePreview.classList.remove('active');
+    removePreviewBackBtn();
+    deselectSlot();
+  }
+
+  function switchToPreviewMode() {
+    editorMode = 'preview';
+    const doc = iframe.contentDocument;
+    if (doc) {
+      const expandStyle = doc.querySelector('style[data-cms-expand]');
+      if (expandStyle) expandStyle.disabled = true;
+      disableSlotInteractions(doc);
+    }
+    btnModePreview.classList.add('active');
+    btnModeEdit.classList.remove('active');
+    deselectSlot();
+    showPreviewBackBtn();
+  }
+
+  function enableSlotInteractions(doc) {
+    const editorStyle = doc.querySelector('style[data-cms-editor]');
+    if (editorStyle) editorStyle.disabled = false;
+    doc.querySelectorAll('[data-slot-id]').forEach(el => {
+      el.style.pointerEvents = '';
+    });
+  }
+
+  function disableSlotInteractions(doc) {
+    const editorStyle = doc.querySelector('style[data-cms-editor]');
+    if (editorStyle) editorStyle.disabled = true;
+    doc.querySelectorAll('[data-slot-id]').forEach(el => {
+      el.style.pointerEvents = '';
+    });
+  }
+
+  function showPreviewBackBtn() {
+    removePreviewBackBtn();
+    previewBackBtn = document.createElement('button');
+    previewBackBtn.className = 'preview-back-btn';
+    previewBackBtn.textContent = 'Back to Edit';
+    previewBackBtn.addEventListener('click', switchToEditMode);
+    document.body.appendChild(previewBackBtn);
+  }
+
+  function removePreviewBackBtn() {
+    if (previewBackBtn) {
+      previewBackBtn.remove();
+      previewBackBtn = null;
+    }
+  }
+
+  btnModeEdit.addEventListener('click', switchToEditMode);
+  btnModePreview.addEventListener('click', switchToPreviewMode);
+
   // ── Inject editor behavior into iframe ──
   function injectEditorScript() {
     const doc = iframe.contentDocument;
     if (!doc) return;
 
     const style = doc.createElement('style');
+    style.setAttribute('data-cms-editor', 'true');
     style.textContent = `
       [data-slot-id] {
         cursor: pointer !important;
@@ -278,30 +349,41 @@
       const slotIds = el.getAttribute('data-slot-id').split(',');
 
       el.addEventListener('mouseenter', () => {
+        if (editorMode !== 'edit') return;
         if (!el.classList.contains('slot-selected')) {
           showLabel(el, slotType);
         }
       });
 
       el.addEventListener('mouseleave', () => {
+        if (editorMode !== 'edit') return;
         if (!el.classList.contains('slot-selected')) {
           removeLabel();
         }
       });
 
       el.addEventListener('click', (e) => {
+        if (editorMode !== 'edit') return;
         e.preventDefault();
         e.stopPropagation();
         selectSlot(el, slotType, slotIds);
       });
     });
 
-    // Click outside to deselect
+    // Click outside to deselect (only in edit mode)
     doc.addEventListener('click', (e) => {
+      if (editorMode !== 'edit') return;
       if (!e.target.closest('[data-slot-id]')) {
         deselectSlot();
       }
     });
+
+    // If we reloaded iframe while in preview mode, restore that state
+    if (editorMode === 'preview') {
+      style.disabled = true;
+      const expandStyle = doc.querySelector('style[data-cms-expand]');
+      if (expandStyle) expandStyle.disabled = true;
+    }
   }
 
   // ── Slot selection ──

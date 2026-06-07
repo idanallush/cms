@@ -89,6 +89,78 @@ body {
   flex-shrink: 0;
 }
 
+/* Mode toggle (Edit/Preview) */
+.mode-toggle {
+  display: flex;
+  gap: 0;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.mode-btn.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.mode-btn:hover:not(.active) {
+  color: #ccc;
+  background: #2a2a2a;
+}
+
+.mode-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.mode-label-edit {
+  color: #3b82f6;
+}
+
+.mode-label-preview {
+  color: #f59e0b;
+}
+
+/* Preview mode: floating "Back to Edit" button */
+.preview-back-btn {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 20px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 200;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+  transition: background 0.15s;
+}
+
+.preview-back-btn:hover {
+  background: #2563eb;
+}
+
 /* Responsive buttons */
 .responsive-btns {
   display: flex;

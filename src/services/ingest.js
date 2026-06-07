@@ -282,6 +282,114 @@ function forceAllVisible($) {
   }
 }
 
+function forceExpandHiddenContent($) {
+  const forceExpandCSS = `
+<style data-cms-expand="true">
+  /* Force ALL accordion content open */
+  details > summary ~ * { display: block !important; }
+
+  /* Force all tab panels visible */
+  [role="tabpanel"],
+  [class*="tab-pane"],
+  [class*="tab-content"] > *,
+  [class*="tab-panel"],
+  [class*="tabpanel"],
+  .tab-pane,
+  .tab-content > div,
+  .tab-content > section {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    clip: auto !important;
+    clip-path: none !important;
+  }
+
+  /* Force all collapsed/hidden content visible */
+  [class*="collapse"]:not(.navbar-collapse),
+  [class*="accordion-body"],
+  [class*="accordion-content"],
+  [class*="accordion-panel"],
+  [class*="faq-answer"],
+  [class*="faq-content"],
+  [class*="read-more-content"],
+  [class*="expandable"],
+  [class*="toggled-content"],
+  [aria-hidden="true"]:not([role="dialog"]):not([aria-modal="true"]),
+  .collapse:not(.show):not(.navbar-collapse),
+  .collapsing {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Force all slider/carousel slides visible */
+  [class*="swiper-slide"],
+  [class*="carousel-item"],
+  [class*="slider-slide"],
+  [class*="slick-slide"],
+  .swiper-slide,
+  .carousel-item,
+  .slick-slide {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    transform: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Make carousels/sliders stack vertically in edit mode */
+  [class*="swiper-wrapper"],
+  [class*="carousel-inner"],
+  [class*="slider-wrapper"],
+  [class*="slick-track"],
+  .swiper-wrapper,
+  .carousel-inner,
+  .slick-track {
+    display: flex !important;
+    flex-direction: column !important;
+    transform: none !important;
+    width: auto !important;
+  }
+
+  /* Force all dropdown/submenu content visible */
+  [class*="dropdown-menu"],
+  [class*="submenu"],
+  .dropdown-menu {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: relative !important;
+  }
+
+  /* Ensure overflow doesn't hide content */
+  [style*="overflow: hidden"],
+  [style*="overflow:hidden"] {
+    overflow: visible !important;
+  }
+</style>`;
+
+  if ($('head').length) {
+    $('head').append(forceExpandCSS);
+  } else if ($('body').length) {
+    $('body').append(forceExpandCSS);
+  }
+
+  // Set all <details> elements to open
+  $('details').attr('open', '');
+}
+
 function removeOverlaysAndPopups($) {
   // Cookie consent elements
   $('[class*="cookie-consent"], [class*="cookie-banner"], [class*="cookie-notice"]').remove();
@@ -379,6 +487,9 @@ function parseHtml(html, pageUrl) {
 
   // Step 3: Force animation-related elements visible (targeted, not global)
   forceAllVisible($);
+
+  // Step 3b: Force-expand hidden interactive content (accordions, tabs, sliders)
+  forceExpandHiddenContent($);
 
   // Step 4: Remove animation and cookie scripts
   removeAnimationScripts($);
