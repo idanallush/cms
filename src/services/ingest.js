@@ -378,6 +378,23 @@ function forceExpandHiddenContent($) {
   [style*="overflow:hidden"] {
     overflow: visible !important;
   }
+
+  /* Force editable elements to be clickable above any overlays */
+  [data-slot-id] {
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
+    cursor: pointer !important;
+  }
+
+  /* Neutralize click-blocking overlay elements */
+  a[class*="overlay"],
+  div[class*="overlay"]:not([class*="cookie"]):not([class*="modal"]):not([class*="popup"]),
+  [class*="elementor-element-overlay"],
+  [class*="click-overlay"],
+  [class*="link-overlay"] {
+    pointer-events: none !important;
+  }
 </style>`;
 
   if ($('head').length) {

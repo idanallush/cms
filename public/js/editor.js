@@ -227,6 +227,7 @@
       const expandStyle = doc.querySelector('style[data-cms-expand]');
       if (expandStyle) expandStyle.disabled = false;
       enableSlotInteractions(doc);
+      doc.body.setAttribute('data-cms-expand-active', 'true');
     }
     btnModeEdit.classList.add('active');
     btnModePreview.classList.remove('active');
@@ -241,6 +242,7 @@
       const expandStyle = doc.querySelector('style[data-cms-expand]');
       if (expandStyle) expandStyle.disabled = true;
       disableSlotInteractions(doc);
+      doc.body.removeAttribute('data-cms-expand-active');
     }
     btnModePreview.classList.add('active');
     btnModeEdit.classList.remove('active');
@@ -342,47 +344,52 @@
       }
     }
 
-    const slots = doc.querySelectorAll('[data-slot-id]');
-
-    slots.forEach((el) => {
-      const slotType = el.getAttribute('data-slot-type');
-      const slotIds = el.getAttribute('data-slot-id').split(',');
-
+    // Hover labels — per-element since mouseenter doesn't bubble
+    doc.querySelectorAll('[data-slot-id]').forEach((el) => {
       el.addEventListener('mouseenter', () => {
         if (editorMode !== 'edit') return;
         if (!el.classList.contains('slot-selected')) {
+          const slotType = el.getAttribute('data-slot-type');
           showLabel(el, slotType);
         }
       });
-
       el.addEventListener('mouseleave', () => {
         if (editorMode !== 'edit') return;
         if (!el.classList.contains('slot-selected')) {
           removeLabel();
         }
       });
-
-      el.addEventListener('click', (e) => {
-        if (editorMode !== 'edit') return;
-        e.preventDefault();
-        e.stopPropagation();
-        selectSlot(el, slotType, slotIds);
-      });
     });
 
-    // Click outside to deselect (only in edit mode)
+    // Single capture-phase click handler — fires before ANY page JS
     doc.addEventListener('click', (e) => {
       if (editorMode !== 'edit') return;
-      if (!e.target.closest('[data-slot-id]')) {
+
+      const target = e.target.closest('[data-slot-id]');
+      if (target) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const slotType = target.getAttribute('data-slot-type');
+        const slotIds = target.getAttribute('data-slot-id').split(',');
+        selectSlot(target, slotType, slotIds);
+      } else {
         deselectSlot();
       }
-    });
+    }, true); // CAPTURE phase
+
+    // Set edit-mode body attribute for CSS coordination
+    if (editorMode === 'edit') {
+      doc.body.setAttribute('data-cms-expand-active', 'true');
+    }
 
     // If we reloaded iframe while in preview mode, restore that state
     if (editorMode === 'preview') {
       style.disabled = true;
       const expandStyle = doc.querySelector('style[data-cms-expand]');
       if (expandStyle) expandStyle.disabled = true;
+      doc.body.removeAttribute('data-cms-expand-active');
     }
   }
 
