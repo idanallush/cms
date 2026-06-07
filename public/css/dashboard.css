@@ -78,8 +78,13 @@ body {
 }
 
 .status-dot.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.status-dot.inactive {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
 }
 
 /* Dashboard */
@@ -210,13 +215,18 @@ body {
 }
 
 .badge-green {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.badge-red {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
 }
 
 .badge-yellow {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
 }
 
 /* Inputs */
@@ -381,18 +391,23 @@ body {
 }
 
 .status-not-handed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.status-live {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.status-draft {
   background: #2a2a2a;
   color: #888;
 }
 
-.status-live {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
-}
-
 .status-password-set {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
 }
 
 .site-card-meta {
@@ -434,7 +449,7 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: #22c55e;
 }
 
 .btn-action-danger {
@@ -602,7 +617,7 @@ body {
   max-width: 360px;
 }
 
-.toast-success { background: #3b82f6; }
+.toast-success { background: #22c55e; }
 .toast-error { background: #333333; }
 
 @keyframes toast-in {
@@ -612,6 +627,277 @@ body {
 
 .hidden {
   display: none !important;
+}
+
+/* Config card manage button */
+.config-card-header .btn-manage {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 8px;
+}
+
+.config-card-header .btn-manage:hover {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #3a3a3a;
+}
+
+/* Site card manage button */
+.btn-manage-site {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #222;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-manage-site:hover {
+  background: #2a2a2a;
+  border-color: #555;
+}
+
+/* ── Modal / Popup ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-box {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  transform: translateY(10px);
+  transition: transform 0.2s;
+}
+
+.modal-overlay.open .modal-box {
+  transform: translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.modal-header h3 {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #fff;
+  background: #2a2a2a;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-body .config-desc {
+  margin-bottom: 16px;
+}
+
+.modal-body .config-fields {
+  gap: 10px;
+}
+
+.modal-body .config-tabs {
+  margin-bottom: 16px;
+}
+
+.modal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.modal-status.connected {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.modal-status.disconnected {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.modal-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.modal-status.connected .modal-status-dot {
+  background: #22c55e;
+}
+
+.modal-status.disconnected .modal-status-dot {
+  background: #ef4444;
+}
+
+/* ── Site Manage Popup Tabs ── */
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #2a2a2a;
+  padding: 0 20px;
+}
+
+.modal-tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+}
+
+.modal-tab:hover {
+  color: #aaa;
+}
+
+.modal-tab.active {
+  color: #fff;
+  border-bottom-color: #22c55e;
+}
+
+.modal-tab-content {
+  display: none;
+  padding: 20px;
+}
+
+.modal-tab-content.active {
+  display: block;
+}
+
+.modal-field {
+  margin-bottom: 14px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.modal-field .input {
+  width: 100%;
+}
+
+.modal-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.modal-divider {
+  height: 1px;
+  background: #2a2a2a;
+  margin: 16px 0;
+}
+
+.modal-info {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* History list inside modal */
+.modal-history-list {
+  list-style: none;
+  padding: 0;
+}
+
+.modal-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #1f1f1f;
+  font-size: 12px;
+}
+
+.modal-history-item:last-child {
+  border-bottom: none;
+}
+
+.modal-history-date {
+  color: #aaa;
+}
+
+.modal-history-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #888;
+}
+
+.modal-history-badge.published {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
 }
 
 /* Mobile */

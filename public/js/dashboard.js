@@ -19,10 +19,17 @@
   const dotAi = document.getElementById('dot-ai');
   const dotVercel = document.getElementById('dot-vercel');
   const dotDb = document.getElementById('dot-db');
-  const btnSaveAi = document.getElementById('btn-save-ai');
-  const btnSaveVercel = document.getElementById('btn-save-vercel');
+
+  // Modal refs
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalBox = document.getElementById('modal-box');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalTabsContainer = document.getElementById('modal-tabs-container');
+  const modalClose = document.getElementById('modal-close');
 
   let selectedProvider = 'openrouter';
+  let settingsCache = null;
 
   function showToast(message, type) {
     const toast = document.createElement('div');
@@ -38,7 +45,60 @@
     return div.innerHTML;
   }
 
-  // ── Config Toggle ──
+  // ══════════════════════════════════════
+  // Modal infrastructure
+  // ══════════════════════════════════════
+
+  function openModal(title, bodyHtml, options) {
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalTabsContainer.style.display = 'none';
+    modalTabsContainer.innerHTML = '';
+
+    if (options && options.tabs) {
+      modalTabsContainer.style.display = 'flex';
+      options.tabs.forEach((tab, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'modal-tab' + (i === 0 ? ' active' : '');
+        btn.textContent = tab.label;
+        btn.dataset.tabId = tab.id;
+        btn.addEventListener('click', () => switchModalTab(tab.id));
+        modalTabsContainer.appendChild(btn);
+      });
+    }
+
+    modalOverlay.classList.add('open');
+
+    if (options && options.onOpen) {
+      options.onOpen();
+    }
+  }
+
+  function closeModal() {
+    modalOverlay.classList.remove('open');
+  }
+
+  function switchModalTab(tabId) {
+    modalTabsContainer.querySelectorAll('.modal-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tabId === tabId);
+    });
+    modalBody.querySelectorAll('.modal-tab-content').forEach(panel => {
+      panel.classList.toggle('active', panel.id === 'mtab-' + tabId);
+    });
+  }
+
+  modalClose.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
+  });
+
+  // ══════════════════════════════════════
+  // Config Toggle
+  // ══════════════════════════════════════
+
   configToggle.addEventListener('click', () => {
     configBody.classList.toggle('hidden');
     btnToggleConfig.innerHTML = configBody.classList.contains('hidden')
@@ -46,107 +106,222 @@
       : '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 7a1 1 0 0 0 0 2h12a1 1 0 1 0 0-2H2z"/></svg>';
   });
 
-  // ── Provider Tabs ──
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedProvider = btn.dataset.provider;
-      const keyInput = document.getElementById('ai-key');
-      keyInput.placeholder = selectedProvider === 'anthropic' ? 'sk-ant-...' : 'sk-or-...';
+  // ══════════════════════════════════════
+  // Config Manage Buttons
+  // ══════════════════════════════════════
+
+  document.querySelectorAll('[data-manage]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const type = btn.dataset.manage;
+      if (type === 'ai') openAiManageModal();
+      else if (type === 'vercel') openVercelManageModal();
+      else if (type === 'db') openDbManageModal();
     });
   });
 
-  // ── Load Settings ──
+  function openAiManageModal() {
+    const connected = settingsCache && settingsCache.ai && settingsCache.ai.connected;
+    const model = (settingsCache && settingsCache.ai && settingsCache.ai.model) || 'anthropic/claude-sonnet-4.5';
+    const provider = (settingsCache && settingsCache.ai && settingsCache.ai.provider) || 'openrouter';
+
+    const statusClass = connected ? 'connected' : 'disconnected';
+    const statusText = connected ? `Connected via ${provider}` : 'Not connected';
+
+    openModal('AI Editing', `
+      <div class="modal-status ${statusClass}">
+        <span class="modal-status-dot"></span>
+        ${statusText}
+      </div>
+      <p class="config-desc">Your key is stored on your server and never shown again. Click-to-edit works without AI.</p>
+      <div class="config-tabs" style="margin-bottom:14px;">
+        <button class="tab-btn ${selectedProvider === 'openrouter' ? 'active' : ''}" data-provider="openrouter">OpenRouter</button>
+        <button class="tab-btn ${selectedProvider === 'anthropic' ? 'active' : ''}" data-provider="anthropic">Anthropic</button>
+      </div>
+      <div class="config-fields">
+        <div class="modal-field">
+          <label>API Key</label>
+          <input type="password" id="modal-ai-key" placeholder="${selectedProvider === 'anthropic' ? 'sk-ant-...' : 'sk-or-...'}" class="input">
+        </div>
+        <div class="modal-field">
+          <label>Model</label>
+          <input type="text" id="modal-ai-model" class="input" value="${escapeHtml(model)}">
+        </div>
+        <button id="modal-btn-save-ai" class="btn-primary btn-small">Save key</button>
+      </div>
+    `, {
+      onOpen: () => {
+        // Provider tabs inside modal
+        modalBody.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            modalBody.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedProvider = btn.dataset.provider;
+            const keyInput = modalBody.querySelector('#modal-ai-key');
+            if (keyInput) keyInput.placeholder = selectedProvider === 'anthropic' ? 'sk-ant-...' : 'sk-or-...';
+          });
+        });
+        // Save button
+        modalBody.querySelector('#modal-btn-save-ai').addEventListener('click', async () => {
+          const key = modalBody.querySelector('#modal-ai-key').value.trim();
+          const model = modalBody.querySelector('#modal-ai-model').value.trim();
+          if (!key) return showToast('Enter an API key', 'error');
+
+          const btn = modalBody.querySelector('#modal-btn-save-ai');
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+          try {
+            const res = await fetch(`${API}/settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: 'ai', value: key, provider: selectedProvider, model }),
+            });
+            if (res.ok) {
+              showToast('AI key saved', 'success');
+              closeModal();
+              loadSettings();
+            } else {
+              const data = await res.json();
+              showToast(data.error?.message || 'Save failed', 'error');
+            }
+          } catch {
+            showToast('Connection error', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save key';
+          }
+        });
+      }
+    });
+  }
+
+  function openVercelManageModal() {
+    const connected = settingsCache && settingsCache.vercel && settingsCache.vercel.connected;
+    const statusClass = connected ? 'connected' : 'disconnected';
+    const statusText = connected ? 'Connected to Vercel' : 'Not connected';
+
+    openModal('Vercel Hosting', `
+      <div class="modal-status ${statusClass}">
+        <span class="modal-status-dot"></span>
+        ${statusText}
+      </div>
+      <p class="config-desc">Connect your Vercel account once. Then every client Publish auto-deploys to their live Vercel site.</p>
+      <div class="config-fields">
+        <div class="modal-field">
+          <label>Vercel Token</label>
+          <input type="password" id="modal-vercel-token" placeholder="Vercel token" class="input">
+        </div>
+        <div class="modal-field">
+          <label>Team ID (optional)</label>
+          <input type="text" id="modal-vercel-team" placeholder="team_..." class="input">
+        </div>
+        <button id="modal-btn-save-vercel" class="btn-primary btn-small">Connect</button>
+      </div>
+    `, {
+      onOpen: () => {
+        modalBody.querySelector('#modal-btn-save-vercel').addEventListener('click', async () => {
+          const token = modalBody.querySelector('#modal-vercel-token').value.trim();
+          const teamId = modalBody.querySelector('#modal-vercel-team').value.trim();
+          if (!token) return showToast('Enter a Vercel token', 'error');
+
+          const btn = modalBody.querySelector('#modal-btn-save-vercel');
+          btn.disabled = true;
+          btn.textContent = 'Connecting...';
+          try {
+            const res = await fetch(`${API}/settings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: 'vercel', value: token, teamId }),
+            });
+            if (res.ok) {
+              showToast('Vercel connected', 'success');
+              closeModal();
+              loadSettings();
+            } else {
+              const data = await res.json();
+              showToast(data.error?.message || 'Failed', 'error');
+            }
+          } catch {
+            showToast('Connection error', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Connect';
+          }
+        });
+      }
+    });
+  }
+
+  function openDbManageModal() {
+    const connected = settingsCache && settingsCache.db && settingsCache.db.connected;
+    const statusClass = connected ? 'connected' : 'disconnected';
+    const statusText = connected ? 'Connected to MongoDB' : 'Using filesystem storage';
+
+    openModal('Database', `
+      <div class="modal-status ${statusClass}">
+        <span class="modal-status-dot"></span>
+        ${statusText}
+      </div>
+      <p class="config-desc">MongoDB enables multi-site management, version history, and team access.</p>
+      <div class="modal-divider"></div>
+      <p class="modal-info">
+        ${connected
+          ? 'Your MongoDB connection is active. Data is being stored in the cloud database.'
+          : 'Set the <code style="color:#aaa;background:#222;padding:2px 6px;border-radius:3px;">MONGODB_URI</code> environment variable and restart the server to enable MongoDB.'}
+      </p>
+    `);
+  }
+
+  // ══════════════════════════════════════
+  // Load Settings
+  // ══════════════════════════════════════
+
   async function loadSettings() {
     try {
       const res = await fetch(`${API}/settings`);
       if (!res.ok) return;
       const data = await res.json();
+      settingsCache = data;
 
+      // AI
       if (data.ai.connected) {
         aiBadge.textContent = `connected · ${data.ai.provider}`;
         aiBadge.className = 'badge badge-green';
-        dotAi.classList.add('active');
+        dotAi.className = 'status-dot active';
+      } else {
+        aiBadge.textContent = 'not connected';
+        aiBadge.className = 'badge badge-red';
+        dotAi.className = 'status-dot inactive';
       }
+
+      // Vercel
       if (data.vercel.connected) {
         vercelBadge.textContent = 'connected · vercel';
         vercelBadge.className = 'badge badge-green';
-        dotVercel.classList.add('active');
+        dotVercel.className = 'status-dot active';
+      } else {
+        vercelBadge.textContent = 'not connected';
+        vercelBadge.className = 'badge badge-red';
+        dotVercel.className = 'status-dot inactive';
       }
+
+      // Database
       if (data.db.connected) {
         dbBadge.textContent = 'connected · MongoDB';
         dbBadge.className = 'badge badge-green';
-        dotDb.classList.add('active');
-      }
-
-      if (data.ai.model) {
-        document.getElementById('ai-model').value = data.ai.model;
+        dotDb.className = 'status-dot active';
+      } else {
+        dbBadge.textContent = 'filesystem mode';
+        dbBadge.className = 'badge badge-gray';
+        dotDb.className = 'status-dot inactive';
       }
     } catch {}
   }
 
-  // ── Save AI Key ──
-  btnSaveAi.addEventListener('click', async () => {
-    const key = document.getElementById('ai-key').value.trim();
-    const model = document.getElementById('ai-model').value.trim();
-    if (!key) return showToast('Enter an API key', 'error');
+  // ══════════════════════════════════════
+  // Load Sites
+  // ══════════════════════════════════════
 
-    btnSaveAi.disabled = true;
-    btnSaveAi.textContent = 'Saving...';
-    try {
-      const res = await fetch(`${API}/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'ai', value: key, provider: selectedProvider, model }),
-      });
-      if (res.ok) {
-        showToast('AI key saved', 'success');
-        document.getElementById('ai-key').value = '';
-        loadSettings();
-      } else {
-        const data = await res.json();
-        showToast(data.error?.message || 'Save failed', 'error');
-      }
-    } catch {
-      showToast('Connection error', 'error');
-    } finally {
-      btnSaveAi.disabled = false;
-      btnSaveAi.textContent = 'Save key';
-    }
-  });
-
-  // ── Save Vercel ──
-  btnSaveVercel.addEventListener('click', async () => {
-    const token = document.getElementById('vercel-token').value.trim();
-    const teamId = document.getElementById('vercel-team').value.trim();
-    if (!token) return showToast('Enter a Vercel token', 'error');
-
-    btnSaveVercel.disabled = true;
-    btnSaveVercel.textContent = 'Connecting...';
-    try {
-      const res = await fetch(`${API}/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'vercel', value: token, teamId }),
-      });
-      if (res.ok) {
-        showToast('Vercel connected', 'success');
-        document.getElementById('vercel-token').value = '';
-        loadSettings();
-      } else {
-        const data = await res.json();
-        showToast(data.error?.message || 'Failed', 'error');
-      }
-    } catch {
-      showToast('Connection error', 'error');
-    } finally {
-      btnSaveVercel.disabled = false;
-      btnSaveVercel.textContent = 'Connect';
-    }
-  });
-
-  // ── Load Sites ──
   async function loadSites() {
     try {
       const res = await fetch(API);
@@ -174,14 +349,13 @@
   }
 
   function getSiteStatus(site) {
+    if (site.publishUrl) {
+      return { label: 'LIVE', cls: 'status-live' };
+    }
     if (!site.clientPasswordHash) {
-      return { label: 'NOT HANDED OFF', cls: 'status-not-handed' };
+      return { label: 'NO CLIENT', cls: 'status-not-handed' };
     }
-    if (site.clientHasAccessed) {
-      const name = site.clientDisplayName ? ` · ${site.clientDisplayName}` : '';
-      return { label: `LIVE WITH CLIENT${name}`, cls: 'status-live' };
-    }
-    return { label: 'PASSWORD SET', cls: 'status-password-set' };
+    return { label: 'DRAFT', cls: 'status-draft' };
   }
 
   function createSiteCard(site) {
@@ -207,54 +381,9 @@
         <div class="site-card-meta">${pageCount} page · ${vCount} versions in history</div>
 
         <div class="site-card-actions">
-          ${site.publishUrl ? `<button class="btn-action" data-action="live" data-url="${escapeHtml(site.publishUrl)}"><span class="dot-green"></span>View live site</button>` : ''}
           <button class="btn-action" data-action="edit" data-id="${site.siteId}">&#9998; Open editor</button>
-          <button class="btn-action" data-action="export" data-id="${site.siteId}">&#8681; Export static</button>
-          <button class="btn-action" data-action="rename" data-id="${site.siteId}" data-name="${escapeHtml(site.name)}">&#9998; Rename</button>
-          <button class="btn-action btn-action-danger" data-action="delete" data-id="${site.siteId}" data-name="${escapeHtml(site.name)}">&#10005; Delete</button>
-        </div>
-
-        <!-- Client Access -->
-        <div class="site-card-expand">
-          <div class="expand-header" data-expand="client-${site.siteId}">
-            &#128273; Client access
-            <span>${site.clientPasswordHash ? '· set (password)' : ''}</span>
-          </div>
-          <div class="expand-body" id="client-${site.siteId}">
-            <p class="expand-desc">Set a password, then send your client the editor link below. They can edit only this site.</p>
-            <div class="expand-row">
-              <input type="text" class="input" placeholder="Client name (shown on login)" value="${escapeHtml(site.clientDisplayName || '')}" data-field="clientName" data-site="${site.siteId}">
-            </div>
-            <div class="expand-row">
-              <input type="password" class="input" placeholder="Min. 8 characters" data-field="password" data-site="${site.siteId}">
-              <button class="btn-primary btn-small" data-action="set-password" data-id="${site.siteId}">Set password</button>
-            </div>
-            <div class="checkbox-row">
-              <input type="checkbox" ${site.requireApproval ? 'checked' : ''} data-field="approval" data-site="${site.siteId}">
-              <label>Require my approval before their changes go live</label>
-            </div>
-            <button class="btn-secondary btn-small" style="margin-top:8px;" data-action="gen-token" data-id="${site.siteId}">Generate one-click private link</button>
-            <div class="client-url-display">
-              <code>${window.location.origin}/editor/?site=${site.siteId}</code>
-              <button class="btn-secondary btn-small" data-action="copy-url" data-url="${window.location.origin}/editor/?site=${site.siteId}">Copy</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Vercel Project -->
-        <div class="site-card-expand">
-          <div class="expand-header" data-expand="vercel-${site.siteId}">
-            &#9650; Vercel project
-            <span>${site.publishUrl ? '· live' : ''}</span>
-          </div>
-          <div class="expand-body" id="vercel-${site.siteId}">
-            <p class="expand-desc">The Vercel project this site deploys to whenever it's published.</p>
-            <div class="expand-row">
-              <input type="text" class="input" placeholder="Vercel project name" value="${escapeHtml(site.vercelProjectName || '')}" data-field="vercelProject" data-site="${site.siteId}">
-              <button class="btn-secondary btn-small" data-action="save-vercel" data-id="${site.siteId}">Save</button>
-              <button class="btn-primary btn-small" data-action="deploy" data-id="${site.siteId}">Save & deploy</button>
-            </div>
-          </div>
+          ${site.publishUrl ? `<button class="btn-action" data-action="live" data-url="${escapeHtml(site.publishUrl)}"><span class="dot-green"></span>View live</button>` : ''}
+          <button class="btn-manage-site" data-action="manage" data-id="${site.siteId}">&#9881; Manage</button>
         </div>
       </div>
     `;
@@ -272,88 +401,310 @@
       });
     });
 
-    card.querySelectorAll('[data-action="export"]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        window.location.href = `${API}/${btn.dataset.id}/export`;
-      });
-    });
-
-    card.querySelectorAll('[data-action="copy-url"]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        navigator.clipboard.writeText(btn.dataset.url).then(() => {
-          btn.textContent = 'Copied!';
-          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-        });
-      });
-    });
-
-    card.querySelectorAll('[data-action="set-password"]').forEach(btn => {
-      btn.addEventListener('click', () => setPassword(btn.dataset.id, card));
-    });
-
-    card.querySelectorAll('[data-action="gen-token"]').forEach(btn => {
-      btn.addEventListener('click', () => generateToken(btn.dataset.id, card));
-    });
-
-    card.querySelectorAll('[data-action="rename"]').forEach(btn => {
-      btn.addEventListener('click', () => renameSite(btn.dataset.id, btn.dataset.name));
-    });
-
-    card.querySelectorAll('[data-action="delete"]').forEach(btn => {
-      btn.addEventListener('click', () => deleteSite(btn.dataset.id, btn.dataset.name));
-    });
-
-    card.querySelectorAll('[data-action="deploy"]').forEach(btn => {
-      btn.addEventListener('click', () => deploySite(btn.dataset.id, card));
-    });
-
-    card.querySelectorAll('[data-action="save-vercel"]').forEach(btn => {
-      btn.addEventListener('click', () => saveVercelProject(btn.dataset.id, card));
-    });
-
-    // Expand toggles
-    card.querySelectorAll('.expand-header').forEach(header => {
-      header.addEventListener('click', () => {
-        const targetId = header.dataset.expand;
-        const body = document.getElementById(targetId);
-        if (body) body.classList.toggle('open');
-      });
-    });
-
-    // Client name change (save on blur)
-    card.querySelectorAll('[data-field="clientName"]').forEach(input => {
-      input.addEventListener('change', () => {
-        saveClientName(input.dataset.site, input.value.trim());
-      });
+    card.querySelectorAll('[data-action="manage"]').forEach(btn => {
+      btn.addEventListener('click', () => openSiteManageModal(site));
     });
 
     return card;
   }
 
-  async function setPassword(siteId, card) {
-    const pwInput = card.querySelector(`[data-field="password"][data-site="${siteId}"]`);
-    const pw = pwInput.value;
-    if (pw.length < 8) {
-      return showToast('Password must be at least 8 characters', 'error');
-    }
-    try {
-      const res = await fetch(`${API}/${siteId}/password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      if (res.ok) {
-        showToast('Password set', 'success');
-        pwInput.value = '';
-        loadSites();
-      } else {
-        const data = await res.json();
-        showToast(data.error?.message || 'Failed', 'error');
+  // ══════════════════════════════════════
+  // Site Manage Modal (Tabbed)
+  // ══════════════════════════════════════
+
+  function openSiteManageModal(site) {
+    const status = getSiteStatus(site);
+    const publishDate = site.publishedAt ? new Date(site.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+
+    const bodyHtml = `
+      <!-- General tab -->
+      <div class="modal-tab-content active" id="mtab-general">
+        <div class="modal-status ${site.publishUrl ? 'connected' : 'disconnected'}">
+          <span class="modal-status-dot"></span>
+          ${status.label}
+        </div>
+        <div class="modal-field">
+          <label>Site Name</label>
+          <div class="modal-row">
+            <input type="text" id="manage-site-name" class="input" value="${escapeHtml(site.name)}">
+            <button class="btn-primary btn-small" id="manage-btn-rename">Save</button>
+          </div>
+        </div>
+        <div class="modal-field">
+          <label>Original URL</label>
+          <p class="modal-info">${escapeHtml(site.originalUrl || 'Pasted HTML')}</p>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-row" style="gap:8px;">
+          <button class="btn-action" id="manage-btn-export" data-id="${site.siteId}">&#8681; Export static</button>
+          <button class="btn-action btn-action-danger" id="manage-btn-delete" data-id="${site.siteId}" data-name="${escapeHtml(site.name)}">&#10005; Delete site</button>
+        </div>
+      </div>
+
+      <!-- Client tab -->
+      <div class="modal-tab-content" id="mtab-client">
+        <div class="modal-field">
+          <label>Client Name (shown on login)</label>
+          <input type="text" id="manage-client-name" class="input" placeholder="Client name" value="${escapeHtml(site.clientDisplayName || '')}">
+        </div>
+        <div class="modal-field">
+          <label>Set Password</label>
+          <div class="modal-row">
+            <input type="password" id="manage-client-pw" class="input" placeholder="Min. 8 characters">
+            <button class="btn-primary btn-small" id="manage-btn-set-pw">Set</button>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-bottom:14px;">
+          <input type="checkbox" id="manage-approval" ${site.requireApproval ? 'checked' : ''}>
+          <label>Require my approval before changes go live</label>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-field">
+          <label>Client Editor URL</label>
+          <div class="client-url-display">
+            <code>${window.location.origin}/editor/?site=${site.siteId}</code>
+            <button class="btn-secondary btn-small" id="manage-btn-copy-url" data-url="${window.location.origin}/editor/?site=${site.siteId}">Copy</button>
+          </div>
+        </div>
+        <button class="btn-secondary btn-small" id="manage-btn-gen-token" style="margin-top:8px;">Generate one-click private link</button>
+      </div>
+
+      <!-- Publishing tab -->
+      <div class="modal-tab-content" id="mtab-publishing">
+        <div class="modal-status ${site.publishUrl ? 'connected' : 'disconnected'}">
+          <span class="modal-status-dot"></span>
+          ${site.publishUrl ? 'Published' : 'Not published'}
+        </div>
+        ${site.publishUrl ? `<div class="modal-field"><label>Live URL</label><p class="modal-info"><a href="${escapeHtml(site.publishUrl)}" target="_blank" rel="noopener" style="color:#22c55e;">${escapeHtml(site.publishUrl)}</a></p></div>` : ''}
+        <div class="modal-field">
+          <label>Vercel Project Name</label>
+          <div class="modal-row">
+            <input type="text" id="manage-vercel-project" class="input" placeholder="Vercel project name" value="${escapeHtml(site.vercelProjectName || '')}">
+            <button class="btn-secondary btn-small" id="manage-btn-save-vercel">Save</button>
+          </div>
+        </div>
+        <div class="modal-divider"></div>
+        <button class="btn-primary btn-small" id="manage-btn-deploy" data-id="${site.siteId}">Publish now</button>
+        <p class="modal-info" style="margin-top:8px;">Last published: ${publishDate}</p>
+      </div>
+
+      <!-- History tab -->
+      <div class="modal-tab-content" id="mtab-history">
+        <div id="manage-history-list">
+          <p class="modal-info">Loading versions...</p>
+        </div>
+      </div>
+    `;
+
+    openModal(site.name, bodyHtml, {
+      tabs: [
+        { id: 'general', label: 'General' },
+        { id: 'client', label: 'Client' },
+        { id: 'publishing', label: 'Publishing' },
+        { id: 'history', label: 'History' },
+      ],
+      onOpen: () => {
+        bindSiteManageEvents(site);
+        loadSiteHistory(site.siteId);
       }
-    } catch {
-      showToast('Connection error', 'error');
+    });
+  }
+
+  function bindSiteManageEvents(site) {
+    const siteId = site.siteId;
+
+    // General — Rename
+    const btnRename = modalBody.querySelector('#manage-btn-rename');
+    if (btnRename) {
+      btnRename.addEventListener('click', async () => {
+        const newName = modalBody.querySelector('#manage-site-name').value.trim();
+        if (!newName) return;
+        try {
+          const res = await fetch(`${API}/${siteId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+          });
+          if (res.ok) {
+            showToast('Site renamed', 'success');
+            closeModal();
+            loadSites();
+          } else {
+            const data = await res.json();
+            showToast(data.error?.message || 'Rename failed', 'error');
+          }
+        } catch {
+          showToast('Connection error', 'error');
+        }
+      });
+    }
+
+    // General — Export
+    const btnExport = modalBody.querySelector('#manage-btn-export');
+    if (btnExport) {
+      btnExport.addEventListener('click', () => {
+        window.location.href = `${API}/${siteId}/export`;
+      });
+    }
+
+    // General — Delete
+    const btnDelete = modalBody.querySelector('#manage-btn-delete');
+    if (btnDelete) {
+      btnDelete.addEventListener('click', () => {
+        if (!confirm(`Delete "${site.name}"? This cannot be undone.`)) return;
+        deleteSite(siteId, site.name);
+        closeModal();
+      });
+    }
+
+    // Client — Set password
+    const btnSetPw = modalBody.querySelector('#manage-btn-set-pw');
+    if (btnSetPw) {
+      btnSetPw.addEventListener('click', async () => {
+        const pw = modalBody.querySelector('#manage-client-pw').value;
+        if (pw.length < 8) return showToast('Password must be at least 8 characters', 'error');
+        try {
+          const res = await fetch(`${API}/${siteId}/password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw }),
+          });
+          if (res.ok) {
+            showToast('Password set', 'success');
+            modalBody.querySelector('#manage-client-pw').value = '';
+            loadSites();
+          } else {
+            const data = await res.json();
+            showToast(data.error?.message || 'Failed', 'error');
+          }
+        } catch {
+          showToast('Connection error', 'error');
+        }
+      });
+    }
+
+    // Client — Name blur save
+    const clientNameInput = modalBody.querySelector('#manage-client-name');
+    if (clientNameInput) {
+      clientNameInput.addEventListener('change', () => {
+        saveClientName(siteId, clientNameInput.value.trim());
+      });
+    }
+
+    // Client — Copy URL
+    const btnCopyUrl = modalBody.querySelector('#manage-btn-copy-url');
+    if (btnCopyUrl) {
+      btnCopyUrl.addEventListener('click', () => {
+        navigator.clipboard.writeText(btnCopyUrl.dataset.url).then(() => {
+          btnCopyUrl.textContent = 'Copied!';
+          setTimeout(() => { btnCopyUrl.textContent = 'Copy'; }, 1500);
+        });
+      });
+    }
+
+    // Client — Generate token
+    const btnGenToken = modalBody.querySelector('#manage-btn-gen-token');
+    if (btnGenToken) {
+      btnGenToken.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`${API}/${siteId}/access-token`, { method: 'POST' });
+          const data = await res.json();
+          if (res.ok && data.token) {
+            const url = `${window.location.origin}/editor/?site=${siteId}&token=${data.token}`;
+            navigator.clipboard.writeText(url);
+            showToast('Private link copied to clipboard', 'success');
+          }
+        } catch {
+          showToast('Failed to generate link', 'error');
+        }
+      });
+    }
+
+    // Publishing — Save Vercel project
+    const btnSaveVercel = modalBody.querySelector('#manage-btn-save-vercel');
+    if (btnSaveVercel) {
+      btnSaveVercel.addEventListener('click', async () => {
+        const name = modalBody.querySelector('#manage-vercel-project').value.trim();
+        try {
+          await fetch(`${API}/${siteId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vercelProjectName: name }),
+          });
+          showToast('Vercel project saved', 'success');
+        } catch {
+          showToast('Failed', 'error');
+        }
+      });
+    }
+
+    // Publishing — Deploy
+    const btnDeploy = modalBody.querySelector('#manage-btn-deploy');
+    if (btnDeploy) {
+      btnDeploy.addEventListener('click', async () => {
+        btnDeploy.disabled = true;
+        btnDeploy.textContent = 'Deploying...';
+        try {
+          // Save project name first
+          const projName = modalBody.querySelector('#manage-vercel-project');
+          if (projName) {
+            await fetch(`${API}/${siteId}/settings`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ vercelProjectName: projName.value.trim() }),
+            });
+          }
+          const res = await fetch(`${API}/${siteId}/publish`, { method: 'POST' });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast(`Published: ${data.url}`, 'success');
+            closeModal();
+            loadSites();
+          } else {
+            showToast(data.error?.message || 'Deploy failed', 'error');
+          }
+        } catch {
+          showToast('Deploy failed', 'error');
+        } finally {
+          btnDeploy.disabled = false;
+          btnDeploy.textContent = 'Publish now';
+        }
+      });
     }
   }
+
+  async function loadSiteHistory(siteId) {
+    const container = modalBody.querySelector('#manage-history-list');
+    if (!container) return;
+    try {
+      const res = await fetch(`${API}/${siteId}/history`);
+      if (!res.ok) {
+        container.innerHTML = '<p class="modal-info">Could not load history.</p>';
+        return;
+      }
+      const data = await res.json();
+      const versions = data.versions || [];
+      if (versions.length === 0) {
+        container.innerHTML = '<p class="modal-info">No versions yet. Save changes in the editor to create versions.</p>';
+        return;
+      }
+      container.innerHTML = '<ul class="modal-history-list">' + versions.map(v => {
+        const date = new Date(v.createdAt || v.savedAt).toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        const badge = v.published
+          ? '<span class="modal-history-badge published">published</span>'
+          : '<span class="modal-history-badge">draft</span>';
+        return `<li class="modal-history-item"><span class="modal-history-date">${date}</span>${badge}</li>`;
+      }).join('') + '</ul>';
+    } catch {
+      container.innerHTML = '<p class="modal-info">Could not load history.</p>';
+    }
+  }
+
+  // ══════════════════════════════════════
+  // Site Actions (standalone)
+  // ══════════════════════════════════════
 
   async function saveClientName(siteId, name) {
     try {
@@ -365,85 +716,7 @@
     } catch {}
   }
 
-  async function generateToken(siteId, card) {
-    try {
-      const res = await fetch(`${API}/${siteId}/access-token`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.token) {
-        const url = `${window.location.origin}/editor/?site=${siteId}&token=${data.token}`;
-        navigator.clipboard.writeText(url);
-        showToast('Private link copied to clipboard', 'success');
-      }
-    } catch {
-      showToast('Failed to generate link', 'error');
-    }
-  }
-
-  async function saveVercelProject(siteId, card) {
-    const input = card.querySelector(`[data-field="vercelProject"][data-site="${siteId}"]`);
-    const name = input.value.trim();
-    try {
-      await fetch(`${API}/${siteId}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vercelProjectName: name }),
-      });
-      showToast('Vercel project saved', 'success');
-    } catch {
-      showToast('Failed', 'error');
-    }
-  }
-
-  async function deploySite(siteId, card) {
-    const btn = card.querySelector(`[data-action="deploy"][data-id="${siteId}"]`);
-    btn.disabled = true;
-    btn.textContent = 'Deploying...';
-    try {
-      // Save project name first
-      await saveVercelProject(siteId, card);
-      const res = await fetch(`${API}/${siteId}/publish`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(`Published: ${data.url}`, 'success');
-        loadSites();
-      } else {
-        showToast(data.error?.message || 'Deploy failed', 'error');
-      }
-    } catch {
-      showToast('Deploy failed', 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Save & deploy';
-    }
-  }
-
-  // ── Rename Site ──
-  async function renameSite(siteId, currentName) {
-    const newName = prompt('Enter new site name:', currentName);
-    if (!newName || newName.trim() === '' || newName.trim() === currentName) return;
-
-    try {
-      const res = await fetch(`${API}/${siteId}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-      if (res.ok) {
-        showToast('Site renamed', 'success');
-        loadSites();
-      } else {
-        const data = await res.json();
-        showToast(data.error?.message || 'Rename failed', 'error');
-      }
-    } catch {
-      showToast('Connection error', 'error');
-    }
-  }
-
-  // ── Delete Site ──
   async function deleteSite(siteId, siteName) {
-    if (!confirm(`Delete "${siteName}"? This will permanently remove the site and all its versions. This cannot be undone.`)) return;
-
     try {
       const res = await fetch(`${API}/${siteId}`, { method: 'DELETE' });
       if (res.ok) {
@@ -458,7 +731,10 @@
     }
   }
 
-  // ── Ingest ──
+  // ══════════════════════════════════════
+  // Ingest
+  // ══════════════════════════════════════
+
   ingestForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = ingestUrl.value.trim();
