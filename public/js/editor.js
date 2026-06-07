@@ -108,6 +108,8 @@
       pendingChanges[slotId] = { oldValue, newValue };
     }
     updateChangesUI();
+    // Sync content panel if open
+    syncContentPanel(slotId);
   }
 
   function updateChangesUI() {
@@ -164,6 +166,7 @@
       const panelId = `panel-${tab.dataset.panel}`;
       document.getElementById(panelId).classList.add('active');
 
+      if (tab.dataset.panel === 'content') buildContentList();
       if (tab.dataset.panel === 'sections') buildSectionsList();
       if (tab.dataset.panel === 'seo') loadSeo();
     });
@@ -666,6 +669,363 @@
     updateChangesUI();
     showToast('Styles reset', 'info');
   });
+
+  // ── Content panel ──
+  const contentListEl = document.getElementById('content-list');
+  const contentSearch = document.getElementById('content-search');
+  let contentItemElements = []; // cache for search filtering
+
+  function buildContentList() {
+    contentListEl.innerHTML = '';
+    contentItemElements = [];
+
+    const slotIds = Object.keys(contentMap);
+    if (slotIds.length === 0) {
+      contentListEl.innerHTML = '<p class="panel-empty">No editable content found</p>';
+      return;
+    }
+
+    // Group slots by display category
+    const groups = {
+      headings: { label: 'Headings', items: [] },
+      paragraphs: { label: 'Paragraphs', items: [] },
+      buttons: { label: 'Buttons', items: [] },
+      links: { label: 'Links', items: [] },
+      images: { label: 'Images', items: [] },
+      other: { label: 'Other', items: [] },
+    };
+
+    for (const slotId of slotIds) {
+      const slot = contentMap[slotId];
+      if (!slot) continue;
+
+      const tag = (slot.tag || '').toLowerCase();
+      const type = slot.type;
+
+      if (/^h[1-6]$/.test(tag)) {
+        groups.headings.items.push({ slotId, slot });
+      } else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') {
+        groups.paragraphs.items.push({ slotId, slot });
+      } else if (tag === 'button' || tag === 'submit') {
+        groups.buttons.items.push({ slotId, slot });
+      } else if (type === 'link') {
+        groups.links.items.push({ slotId, slot });
+      } else if (type === 'image') {
+        groups.images.items.push({ slotId, slot });
+      } else {
+        groups.other.items.push({ slotId, slot });
+      }
+    }
+
+    for (const groupKey of Object.keys(groups)) {
+      const group = groups[groupKey];
+      if (group.items.length === 0) continue;
+
+      const header = document.createElement('div');
+      header.className = 'content-group-header';
+      header.textContent = `${group.label} (${group.items.length})`;
+      contentListEl.appendChild(header);
+
+      for (const { slotId, slot } of group.items) {
+        const item = createContentItem(slotId, slot);
+        contentListEl.appendChild(item);
+        contentItemElements.push({ el: item, slotId, slot });
+      }
+    }
+  }
+
+  function createContentItem(slotId, slot) {
+    const item = document.createElement('div');
+    item.className = 'content-item';
+    item.dataset.slotId = slotId;
+
+    const tag = (slot.tag || '').toUpperCase();
+    const typeLabel = slot.type === 'richtext' ? 'rich text' : slot.type;
+    const currentValue = pendingChanges[slotId]?.newValue ?? slot.value;
+
+    if (slot.type === 'image') {
+      item.innerHTML = `
+        <div class="content-item-header">
+          <span class="content-item-type">${tag || 'IMG'}</span>
+          <span class="content-item-label">${typeLabel}</span>
+        </div>
+        <div class="content-item-img-preview">
+          <img src="${escapeHtml(currentValue)}" alt="">
+        </div>
+        <div class="content-item-edit">
+          <label class="prop-label" style="margin-top:0">Image URL</label>
+          <input type="text" class="content-item-textarea content-img-src" value="${escapeAttr(currentValue)}" style="min-height:auto">
+          <label class="prop-label">Alt Text</label>
+          <input type="text" class="content-item-textarea content-img-alt" value="${escapeAttr(getAltForImageSlot(slotId))}" style="min-height:auto">
+          <div class="content-item-actions">
+            <button class="content-item-apply">Apply</button>
+            <button class="content-item-cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+    } else {
+      const previewText = stripHtml(currentValue).slice(0, 120);
+      item.innerHTML = `
+        <div class="content-item-header">
+          <span class="content-item-type">${tag || 'TXT'}</span>
+          <span class="content-item-label">${typeLabel}</span>
+        </div>
+        <div class="content-item-preview">${escapeHtml(previewText) || '(empty)'}</div>
+        <div class="content-item-edit">
+          <textarea class="content-item-textarea">${escapeHtml(currentValue)}</textarea>
+          <div class="content-item-actions">
+            <button class="content-item-apply">Apply</button>
+            <button class="content-item-cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Click to expand
+    const headerEl = item.querySelector('.content-item-header');
+    const previewEl = item.querySelector('.content-item-preview') || item.querySelector('.content-item-img-preview');
+
+    const toggleExpand = (e) => {
+      // Don't toggle if clicking inside the edit area
+      if (e.target.closest('.content-item-edit')) return;
+
+      const wasExpanded = item.classList.contains('content-item-expanded');
+
+      // Collapse all
+      contentListEl.querySelectorAll('.content-item-expanded').forEach(el => {
+        el.classList.remove('content-item-expanded');
+      });
+
+      if (!wasExpanded) {
+        item.classList.add('content-item-expanded');
+        highlightOnPage(slotId);
+
+        // Focus textarea
+        const ta = item.querySelector('.content-item-textarea');
+        if (ta) setTimeout(() => ta.focus(), 50);
+      }
+    };
+
+    headerEl.addEventListener('click', toggleExpand);
+    if (previewEl) previewEl.addEventListener('click', toggleExpand);
+
+    // Apply
+    item.querySelector('.content-item-apply').addEventListener('click', (e) => {
+      e.stopPropagation();
+      applyContentItem(slotId, slot, item);
+    });
+
+    // Cancel
+    item.querySelector('.content-item-cancel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelContentItem(slotId, slot, item);
+    });
+
+    return item;
+  }
+
+  function applyContentItem(slotId, slot, item) {
+    const oldVal = slot.value;
+    const doc = iframe.contentDocument;
+
+    if (slot.type === 'image') {
+      const newSrc = item.querySelector('.content-img-src').value.trim();
+      const newAlt = item.querySelector('.content-img-alt').value.trim();
+
+      if (newSrc && newSrc !== oldVal) {
+        addPendingChange(slotId, oldVal, newSrc);
+        if (doc) {
+          const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+          if (el) el.src = newSrc;
+        }
+      }
+
+      // Find and update alt slot
+      const altSlotId = findAltSlotForImage(slotId);
+      if (altSlotId && contentMap[altSlotId]) {
+        const oldAlt = contentMap[altSlotId].value;
+        if (newAlt !== oldAlt) {
+          addPendingChange(altSlotId, oldAlt, newAlt);
+          if (doc) {
+            const el = doc.querySelector(`[data-slot-id*="${altSlotId}"]`);
+            if (el) el.alt = newAlt;
+          }
+        }
+      }
+    } else {
+      const textarea = item.querySelector('.content-item-textarea');
+      const newVal = textarea.value.trim();
+
+      if (newVal !== oldVal) {
+        addPendingChange(slotId, oldVal, newVal);
+
+        if (doc) {
+          const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+          if (el) {
+            if (slot.type === 'richtext') el.innerHTML = newVal;
+            else if (slot.type === 'text') el.textContent = newVal;
+            else if (slot.type === 'link') el.href = newVal;
+          }
+        }
+      }
+    }
+
+    // Collapse and update preview
+    item.classList.remove('content-item-expanded');
+    updateContentItemPreview(slotId, item);
+
+    // Show brief "Updated" indicator
+    const indicator = document.createElement('div');
+    indicator.className = 'content-item-updated';
+    indicator.textContent = 'Updated';
+    item.appendChild(indicator);
+    setTimeout(() => indicator.remove(), 2000);
+
+    showToast('Change applied. Save to keep.', 'info');
+  }
+
+  function cancelContentItem(slotId, slot, item) {
+    const currentValue = pendingChanges[slotId]?.newValue ?? slot.value;
+
+    if (slot.type === 'image') {
+      item.querySelector('.content-img-src').value = currentValue;
+      item.querySelector('.content-img-alt').value = getAltForImageSlot(slotId);
+    } else {
+      item.querySelector('.content-item-textarea').value = currentValue;
+    }
+
+    item.classList.remove('content-item-expanded');
+  }
+
+  function updateContentItemPreview(slotId, item) {
+    const slot = contentMap[slotId];
+    if (!slot) return;
+    const currentValue = pendingChanges[slotId]?.newValue ?? slot.value;
+
+    if (slot.type === 'image') {
+      const img = item.querySelector('.content-item-img-preview img');
+      if (img) img.src = currentValue;
+      const srcInput = item.querySelector('.content-img-src');
+      if (srcInput) srcInput.value = currentValue;
+    } else {
+      const preview = item.querySelector('.content-item-preview');
+      if (preview) preview.textContent = stripHtml(currentValue).slice(0, 120) || '(empty)';
+      const textarea = item.querySelector('.content-item-textarea');
+      if (textarea) textarea.value = currentValue;
+    }
+  }
+
+  function highlightOnPage(slotId) {
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+    if (!el) return;
+
+    // Check if element is visible
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Temporary glow
+    const prevOutline = el.style.outline;
+    const prevOutlineOffset = el.style.outlineOffset;
+    el.style.outline = '3px solid #3b82f6';
+    el.style.outlineOffset = '3px';
+    setTimeout(() => {
+      el.style.outline = prevOutline;
+      el.style.outlineOffset = prevOutlineOffset;
+    }, 2000);
+  }
+
+  // Helper: find alt text slot ID that is a sibling of an image slot
+  function findAltSlotForImage(imgSlotId) {
+    // Image slots are paired: img_src and img_alt share the same element
+    // The alt slot ID follows the pattern: replace img_src with img_alt
+    const altId = imgSlotId.replace('img_src', 'img_alt');
+    if (contentMap[altId]) return altId;
+
+    // Fallback: look for same element with text type
+    const imgSlot = contentMap[imgSlotId];
+    if (!imgSlot) return null;
+    for (const [id, s] of Object.entries(contentMap)) {
+      if (id !== imgSlotId && s.path === imgSlot.path && s.type === 'text' && s.tag === 'img') {
+        return id;
+      }
+    }
+    return null;
+  }
+
+  function getAltForImageSlot(imgSlotId) {
+    const altId = findAltSlotForImage(imgSlotId);
+    if (altId && contentMap[altId]) {
+      return pendingChanges[altId]?.newValue ?? contentMap[altId].value;
+    }
+    return '';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  function stripHtml(str) {
+    if (!str) return '';
+    return str.replace(/<[^>]*>/g, '').trim();
+  }
+
+  // Content search
+  contentSearch.addEventListener('input', () => {
+    const query = contentSearch.value.toLowerCase().trim();
+    let currentHeader = null;
+    let headerHasVisible = false;
+
+    for (const child of Array.from(contentListEl.children)) {
+      if (child.classList.contains('content-group-header')) {
+        // Show/hide previous header based on whether it had visible items
+        if (currentHeader) {
+          currentHeader.style.display = headerHasVisible ? '' : 'none';
+        }
+        currentHeader = child;
+        headerHasVisible = false;
+        continue;
+      }
+
+      if (!child.dataset?.slotId) continue;
+
+      if (!query) {
+        child.style.display = '';
+        headerHasVisible = true;
+        continue;
+      }
+
+      const slot = contentMap[child.dataset.slotId];
+      const text = (slot?.value || '').toLowerCase();
+      const tag = (slot?.tag || '').toLowerCase();
+      const matches = text.includes(query) || tag.includes(query);
+      child.style.display = matches ? '' : 'none';
+      if (matches) headerHasVisible = true;
+    }
+
+    // Handle last header
+    if (currentHeader) {
+      currentHeader.style.display = headerHasVisible ? '' : 'none';
+    }
+  });
+
+  // Sync: update content panel when page editing applies changes
+  function syncContentPanel(slotId) {
+    const item = contentListEl.querySelector(`.content-item[data-slot-id="${slotId}"]`);
+    if (item) {
+      updateContentItemPreview(slotId, item);
+    }
+  }
 
   // ── Sections panel ──
   function buildSectionsList() {

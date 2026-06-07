@@ -47,6 +47,7 @@
     <div id="right-panel">
       <div class="panel-tabs">
         <button class="panel-tab active" data-panel="editor">Editor</button>
+        <button class="panel-tab" data-panel="content">Content</button>
         <button class="panel-tab" data-panel="sections">Sections</button>
         <button class="panel-tab" data-panel="seo">SEO</button>
         <button class="panel-tab" data-panel="inbox">Inbox</button>
@@ -171,6 +172,14 @@
             <button id="style-reset" class="toolbar-btn btn-secondary prop-apply-btn">Reset</button>
           </div>
         </div>
+      </div>
+
+      <!-- Content Panel -->
+      <div id="panel-content" class="panel-content">
+        <div class="content-panel-header">
+          <input type="text" id="content-search" class="prop-input" placeholder="Search content...">
+        </div>
+        <div id="content-list" class="content-list"></div>
       </div>
 
       <!-- Sections Panel -->
