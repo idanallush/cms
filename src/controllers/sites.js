@@ -264,7 +264,13 @@ export async function updateSettings(req, res) {
   if (customDomain !== undefined) updates.customDomain = customDomain;
   if (clientDisplayName !== undefined) updates.clientDisplayName = clientDisplayName;
   if (requireApproval !== undefined) updates.requireApproval = requireApproval;
-  if (vercelProjectName !== undefined) updates.vercelProjectName = vercelProjectName;
+  if (vercelProjectName !== undefined) {
+    updates.vercelProjectName = vercelProjectName;
+    const currentMeta = await store.getMeta(siteId);
+    if (currentMeta && currentMeta.vercelProjectName !== vercelProjectName) {
+      updates.vercelProjectId = null;
+    }
+  }
 
   const updated = await store.updateMeta(siteId, updates);
   res.json(updated);

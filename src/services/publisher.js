@@ -93,16 +93,7 @@ export async function publishToVercel(siteId) {
   const styles = await store.getStyles(siteId);
   const html = generatePublishHtml(template, content, meta, styles);
 
-  const projectName = meta.vercelProjectName || `cms-${siteId.slice(0, 8)}`;
-
-  console.log('[publish] siteId:', siteId);
-  console.log('[publish] meta.vercelProjectName:', meta.vercelProjectName);
-  console.log('[publish] meta.vercelProjectId:', meta.vercelProjectId);
-  console.log('[publish] resolved projectName:', projectName);
-  console.log('[publish] teamId:', teamId);
-
   const deployPayload = {
-    name: projectName,
     files: [
       {
         file: 'index.html',
@@ -116,9 +107,20 @@ export async function publishToVercel(siteId) {
     target: 'production',
   };
 
-  if (meta.vercelProjectId) {
-    deployPayload.project = meta.vercelProjectId;
+  if (meta.vercelProjectName) {
+    deployPayload.name = meta.vercelProjectName;
+  } else {
+    deployPayload.name = `cms-${siteId.slice(0, 8)}`;
+    if (meta.vercelProjectId) {
+      deployPayload.project = meta.vercelProjectId;
+    }
   }
+
+  console.log('[publish] siteId:', siteId);
+  console.log('[publish] meta.vercelProjectName:', meta.vercelProjectName);
+  console.log('[publish] meta.vercelProjectId:', meta.vercelProjectId);
+  console.log('[publish] payload name:', deployPayload.name, 'project:', deployPayload.project);
+  console.log('[publish] teamId:', teamId);
 
   const deployUrl = teamId
     ? `${VERCEL_API}/v13/deployments?teamId=${teamId}`
@@ -153,7 +155,7 @@ export async function publishToVercel(siteId) {
   return {
     url: `https://${deployment.url}`,
     deploymentId: deployment.id,
-    projectId: deployment.projectId || projectName,
+    projectId: deployment.projectId || deployPayload.name,
     publishedAt: new Date().toISOString(),
   };
 }
