@@ -133,7 +133,7 @@ export async function publishToVercel(siteId) {
   await store.updateMeta(siteId, {
     publishedAt: new Date().toISOString(),
     publishUrl: `https://${deployment.url}`,
-    vercelProjectId: deployment.projectId || projectName,
+    ...(deployment.projectId ? { vercelProjectId: deployment.projectId } : {}),
     vercelDeploymentId: deployment.id,
   });
 
