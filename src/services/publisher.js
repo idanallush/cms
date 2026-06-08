@@ -93,7 +93,26 @@ export async function publishToVercel(siteId) {
   const styles = await store.getStyles(siteId);
   const html = generatePublishHtml(template, content, meta, styles);
 
-  const projectName = `cms-${siteId.slice(0, 8)}`;
+  const projectName = meta.vercelProjectName || `cms-${siteId.slice(0, 8)}`;
+
+  const deployPayload = {
+    name: projectName,
+    files: [
+      {
+        file: 'index.html',
+        data: Buffer.from(html).toString('base64'),
+        encoding: 'base64',
+      },
+    ],
+    projectSettings: {
+      framework: null,
+    },
+    target: 'production',
+  };
+
+  if (meta.vercelProjectId) {
+    deployPayload.project = meta.vercelProjectId;
+  }
 
   const deployRes = await fetch(`${VERCEL_API}/v13/deployments`, {
     method: 'POST',
@@ -101,20 +120,7 @@ export async function publishToVercel(siteId) {
       'Authorization': `Bearer ${VERCEL_TOKEN}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      name: projectName,
-      files: [
-        {
-          file: 'index.html',
-          data: Buffer.from(html).toString('base64'),
-          encoding: 'base64',
-        },
-      ],
-      projectSettings: {
-        framework: null,
-      },
-      target: 'production',
-    }),
+    body: JSON.stringify(deployPayload),
   });
 
   if (!deployRes.ok) {
@@ -127,7 +133,7 @@ export async function publishToVercel(siteId) {
   await store.updateMeta(siteId, {
     publishedAt: new Date().toISOString(),
     publishUrl: `https://${deployment.url}`,
-    vercelProjectId: deployment.projectId || projectName,
+    ...(deployment.projectId ? { vercelProjectId: deployment.projectId } : {}),
     vercelDeploymentId: deployment.id,
   });
 
