@@ -95,6 +95,12 @@ export async function publishToVercel(siteId) {
 
   const projectName = meta.vercelProjectName || `cms-${siteId.slice(0, 8)}`;
 
+  console.log('[publish] siteId:', siteId);
+  console.log('[publish] meta.vercelProjectName:', meta.vercelProjectName);
+  console.log('[publish] meta.vercelProjectId:', meta.vercelProjectId);
+  console.log('[publish] resolved projectName:', projectName);
+  console.log('[publish] teamId:', teamId);
+
   const deployPayload = {
     name: projectName,
     files: [
@@ -114,7 +120,14 @@ export async function publishToVercel(siteId) {
     deployPayload.project = meta.vercelProjectId;
   }
 
-  const deployRes = await fetch(`${VERCEL_API}/v13/deployments`, {
+  const deployUrl = teamId
+    ? `${VERCEL_API}/v13/deployments?teamId=${teamId}`
+    : `${VERCEL_API}/v13/deployments`;
+
+  console.log('[publish] deploy URL:', deployUrl);
+  console.log('[publish] deploy payload name:', deployPayload.name, 'project:', deployPayload.project);
+
+  const deployRes = await fetch(deployUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${VERCEL_TOKEN}`,
