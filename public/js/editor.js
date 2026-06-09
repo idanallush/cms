@@ -275,7 +275,7 @@
     previewBackBtn.className = 'preview-back-btn';
     previewBackBtn.textContent = 'Back to Edit';
     previewBackBtn.addEventListener('click', switchToEditMode);
-    document.body.appendChild(previewBackBtn);
+    document.getElementById('preview-area').appendChild(previewBackBtn);
   }
 
   function removePreviewBackBtn() {
@@ -685,40 +685,11 @@
       return;
     }
 
-    // Group slots by display category
-    const groups = {
-      headings: { label: 'Headings', items: [] },
-      paragraphs: { label: 'Paragraphs', items: [] },
-      buttons: { label: 'Buttons', items: [] },
-      links: { label: 'Links', items: [] },
-      images: { label: 'Images', items: [] },
-      other: { label: 'Other', items: [] },
-    };
+    // Try to group by page section using iframe DOM
+    const doc = iframe.contentDocument;
+    const sectionGroups = buildSectionGroups(doc, slotIds);
 
-    for (const slotId of slotIds) {
-      const slot = contentMap[slotId];
-      if (!slot) continue;
-
-      const tag = (slot.tag || '').toLowerCase();
-      const type = slot.type;
-
-      if (/^h[1-6]$/.test(tag)) {
-        groups.headings.items.push({ slotId, slot });
-      } else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') {
-        groups.paragraphs.items.push({ slotId, slot });
-      } else if (tag === 'button' || tag === 'submit') {
-        groups.buttons.items.push({ slotId, slot });
-      } else if (type === 'link') {
-        groups.links.items.push({ slotId, slot });
-      } else if (type === 'image') {
-        groups.images.items.push({ slotId, slot });
-      } else {
-        groups.other.items.push({ slotId, slot });
-      }
-    }
-
-    for (const groupKey of Object.keys(groups)) {
-      const group = groups[groupKey];
+    for (const group of sectionGroups) {
       if (group.items.length === 0) continue;
 
       const header = document.createElement('div');
@@ -732,6 +703,87 @@
         contentItemElements.push({ el: item, slotId, slot });
       }
     }
+  }
+
+  function buildSectionGroups(doc, slotIds) {
+    // If iframe DOM is available, group slots by their parent section
+    if (doc) {
+      const sectionTags = ['header', 'nav', 'main', 'section', 'article', 'aside', 'footer'];
+      const sectionEls = [];
+      sectionTags.forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => sectionEls.push(el));
+      });
+
+      if (sectionEls.length > 0) {
+        const groups = [];
+        const assigned = new Set();
+
+        for (const sectionEl of sectionEls) {
+          const heading = sectionEl.querySelector('h1, h2, h3');
+          const sectionName = heading
+            ? heading.textContent.trim().slice(0, 30)
+            : sectionEl.tagName.charAt(0) + sectionEl.tagName.slice(1).toLowerCase();
+          const tagLabel = sectionEl.tagName.toLowerCase();
+          const items = [];
+
+          for (const slotId of slotIds) {
+            if (assigned.has(slotId)) continue;
+            const slot = contentMap[slotId];
+            if (!slot) continue;
+
+            // Check if this slot's element lives inside this section
+            const slotEl = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+            if (slotEl && sectionEl.contains(slotEl)) {
+              items.push({ slotId, slot });
+              assigned.add(slotId);
+            }
+          }
+
+          if (items.length > 0) {
+            groups.push({ label: `${sectionName} (${tagLabel})`, items });
+          }
+        }
+
+        // Slots not found in any section (hidden or outside sections) — still from API
+        const unmatched = [];
+        for (const slotId of slotIds) {
+          if (assigned.has(slotId)) continue;
+          const slot = contentMap[slotId];
+          if (slot) unmatched.push({ slotId, slot });
+        }
+        if (unmatched.length > 0) {
+          groups.push({ label: 'Other / Hidden', items: unmatched });
+        }
+
+        return groups;
+      }
+    }
+
+    // Fallback: group by element type
+    const typeGroups = {
+      headings: { label: 'Headings', items: [] },
+      paragraphs: { label: 'Paragraphs', items: [] },
+      buttons: { label: 'Buttons', items: [] },
+      links: { label: 'Links', items: [] },
+      images: { label: 'Images', items: [] },
+      other: { label: 'Other', items: [] },
+    };
+
+    for (const slotId of slotIds) {
+      const slot = contentMap[slotId];
+      if (!slot) continue;
+      const tag = (slot.tag || '').toLowerCase();
+      const type = slot.type;
+
+      if (/^h[1-6]$/.test(tag)) typeGroups.headings.items.push({ slotId, slot });
+      else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') typeGroups.paragraphs.items.push({ slotId, slot });
+      else if (tag === 'button' || tag === 'submit') typeGroups.buttons.items.push({ slotId, slot });
+      else if (type === 'link') typeGroups.links.items.push({ slotId, slot });
+      else if (type === 'image') typeGroups.images.items.push({ slotId, slot });
+      else typeGroups.other.items.push({ slotId, slot });
+    }
+
+    return Object.values(typeGroups);
   }
 
   function createContentItem(slotId, slot) {

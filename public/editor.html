@@ -41,6 +41,11 @@
     <!-- Preview area (left 75%) -->
     <div id="preview-area">
       <iframe id="site-iframe" sandbox="allow-same-origin"></iframe>
+      <!-- Publish status bar — inside preview area so it doesn't overlap right panel -->
+      <div id="publish-bar" class="publish-bar hidden">
+        <span id="publish-status-text"></span>
+        <a id="publish-link" href="#" target="_blank" rel="noopener" class="hidden">View live site</a>
+      </div>
     </div>
 
     <!-- Right panel (25%) -->
@@ -267,12 +272,6 @@
   </div>
 
   <div id="toast-container"></div>
-
-  <!-- Publish status bar -->
-  <div id="publish-bar" class="publish-bar hidden">
-    <span id="publish-status-text"></span>
-    <a id="publish-link" href="#" target="_blank" rel="noopener" class="hidden">View live site</a>
-  </div>
 
   <!-- Welcome banner (non-blocking) -->
   <div id="welcome-banner" class="welcome-banner hidden">

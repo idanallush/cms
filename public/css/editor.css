@@ -199,9 +199,9 @@ body {
   color: #f59e0b;
 }
 
-/* Preview mode: floating "Back to Edit" button */
+/* Preview mode: floating "Back to Edit" button — inside preview area only */
 .preview-back-btn {
-  position: fixed;
+  position: absolute;
   bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
@@ -213,7 +213,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  z-index: 200;
+  z-index: 10;
   box-shadow: 0 4px 20px rgba(99, 140, 255, 0.4), 0 0 40px rgba(99, 140, 255, 0.15);
   transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
   letter-spacing: -0.01em;
@@ -367,6 +367,7 @@ body {
   justify-content: center;
   background: var(--bg-2);
   overflow: hidden;
+  z-index: 1;
 }
 
 #site-iframe {
@@ -387,6 +388,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  z-index: 5;
 }
 
 .panel-tabs {
@@ -1320,9 +1322,9 @@ body {
   }
 }
 
-/* ── Publish Bar ── */
+/* ── Publish Bar — inside preview area only ── */
 .publish-bar {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
@@ -1337,7 +1339,7 @@ body {
   gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
-  z-index: 100;
+  z-index: 10;
 }
 
 .publish-bar a {
