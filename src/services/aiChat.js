@@ -61,7 +61,7 @@ ${JSON.stringify(slotSummary, null, 2)}`;
       'X-Title': 'Client CMS',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
