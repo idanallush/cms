@@ -9,16 +9,18 @@
   const ingestStatus = document.getElementById('ingest-status');
   const toastContainer = document.getElementById('toast-container');
 
-  // Config refs
-  const configToggle = document.getElementById('config-toggle');
-  const configBody = document.getElementById('config-body');
-  const btnToggleConfig = document.getElementById('btn-toggle-config');
+  // Sidebar integration refs
   const aiBadge = document.getElementById('ai-badge');
   const vercelBadge = document.getElementById('vercel-badge');
   const dbBadge = document.getElementById('db-badge');
   const dotAi = document.getElementById('dot-ai');
   const dotVercel = document.getElementById('dot-vercel');
   const dotDb = document.getElementById('dot-db');
+
+  // Ingest toggle refs
+  const btnAddSite = document.getElementById('btn-add-site');
+  const ingestSection = document.getElementById('ingest-section');
+  const btnCloseIngest = document.getElementById('btn-close-ingest');
 
   // Modal refs
   const modalOverlay = document.getElementById('modal-overlay');
@@ -96,15 +98,24 @@
   });
 
   // ══════════════════════════════════════
-  // Config Toggle
+  // Ingest Toggle (Add site / Close)
   // ══════════════════════════════════════
 
-  configToggle.addEventListener('click', () => {
-    configBody.classList.toggle('hidden');
-    btnToggleConfig.innerHTML = configBody.classList.contains('hidden')
-      ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2H9v5a1 1 0 1 1-2 0V9H2a1 1 0 0 1 0-2h5V2a1 1 0 0 1 1-1z"/></svg>'
-      : '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 7a1 1 0 0 0 0 2h12a1 1 0 1 0 0-2H2z"/></svg>';
-  });
+  if (btnAddSite && ingestSection) {
+    btnAddSite.addEventListener('click', () => {
+      ingestSection.classList.toggle('hidden');
+      if (!ingestSection.classList.contains('hidden')) {
+        const firstInput = ingestSection.querySelector('input');
+        if (firstInput) firstInput.focus();
+      }
+    });
+  }
+
+  if (btnCloseIngest && ingestSection) {
+    btnCloseIngest.addEventListener('click', () => {
+      ingestSection.classList.add('hidden');
+    });
+  }
 
   // ══════════════════════════════════════
   // Config Manage Buttons
@@ -332,17 +343,25 @@
       const { sites } = await res.json();
 
       if (sites.length === 0) {
-        sitesGrid.innerHTML = '<p class="loading-text">No sites yet. Ingest one above.</p>';
+        sitesGrid.innerHTML = `
+          <div class="sites-empty">
+            <div class="sites-empty-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            </div>
+            <h3>No sites yet</h3>
+            <p>Click "Add site" to ingest your first website</p>
+          </div>`;
         return;
       }
 
       sitesGrid.innerHTML = '';
       sites.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      for (const site of sites) {
+      sites.forEach((site, i) => {
         const card = createSiteCard(site);
+        card.style.animationDelay = `${i * 60}ms`;
         sitesGrid.appendChild(card);
-      }
+      });
     } catch (err) {
       sitesGrid.innerHTML = '<p class="loading-text" style="color:#999999;">Failed to load sites</p>';
     }
@@ -867,6 +886,7 @@
         ingestUrl.value = '';
         ingestName.value = '';
         ingestHtml.value = '';
+        if (ingestSection) ingestSection.classList.add('hidden');
         showToast(`Site ingested: ${data.slotCount} slots found`, 'success');
         loadSites();
       } else {
@@ -878,7 +898,7 @@
       ingestStatus.classList.add('error');
     } finally {
       btnIngest.disabled = false;
-      btnIngest.textContent = 'Ingest site';
+      btnIngest.textContent = 'Ingest';
     }
   });
 
