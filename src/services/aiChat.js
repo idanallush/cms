@@ -6,7 +6,7 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 async function getAiConfig() {
   const settings = await store.getAllSettings();
   const provider = settings.ai_provider || 'openrouter';
-  const model = settings.ai_model || 'anthropic/claude-sonnet-4.5';
+  const model = settings.ai_model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
   const apiKey = settings.openrouter_api_key || process.env.OPENROUTER_API_KEY;
   return { provider, model, apiKey };
 }

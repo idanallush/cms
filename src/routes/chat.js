@@ -18,9 +18,12 @@ router.post('/:siteId/chat', requireSiteAccess, asyncHandler(async (req, res) =>
     return res.status(400).json({ error: { message: 'Message too long (max 2000 characters)' } });
   }
 
-  const result = await processChat(siteId, message.trim());
-
-  res.json(result);
+  try {
+    const result = await processChat(siteId, message.trim());
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: { message: `AI chat error: ${err.message}` } });
+  }
 }));
 
 export default router;
