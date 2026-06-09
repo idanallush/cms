@@ -412,6 +412,74 @@
   // Site Manage Modal (Tabbed)
   // ══════════════════════════════════════
 
+  function renderClientTabHtml(site) {
+    const hasPassword = !!site.clientPasswordHash;
+    const clientName = site.clientDisplayName || '';
+    const loginUrl = `${window.location.origin}/login/${site.siteId}`;
+
+    if (hasPassword) {
+      return `
+        <div class="client-status-badge client-status-active">
+          <span class="client-status-dot active"></span>
+          Client access: Active
+        </div>
+        <div class="modal-field">
+          <label>Client name</label>
+          <p class="modal-info" style="color:#ccc;">${escapeHtml(clientName) || 'Not set'}</p>
+        </div>
+        <div class="modal-field">
+          <label>Password</label>
+          <div class="modal-row">
+            <span style="color:#888;letter-spacing:2px;">&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;</span>
+            <button class="btn-secondary btn-small" id="manage-btn-change-pw">Change</button>
+          </div>
+        </div>
+        <div id="change-pw-form" class="hidden" style="margin-bottom:14px;">
+          <div class="modal-field">
+            <label>New password (min 8 chars)</label>
+            <div class="modal-row">
+              <input type="password" id="manage-client-pw" class="input" placeholder="New password">
+              <button class="btn-primary btn-small" id="manage-btn-set-pw">Update</button>
+            </div>
+          </div>
+          <div class="modal-field" style="margin-top:8px;">
+            <label>Client name</label>
+            <input type="text" id="manage-client-name" class="input" placeholder="Client name" value="${escapeHtml(clientName)}">
+          </div>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-field">
+          <label>Login URL</label>
+          <div class="client-url-display">
+            <code>${loginUrl}</code>
+            <button class="btn-secondary btn-small" id="manage-btn-copy-url" data-url="${loginUrl}">Copy</button>
+          </div>
+        </div>
+        <p class="modal-info" style="margin-top:10px;">Send your client the URL and password. They can edit only this site.</p>
+        <div id="client-pw-success" class="hidden" style="margin-top:10px;color:#22c55e;font-size:12px;">Password updated &#10003;</div>
+      `;
+    } else {
+      return `
+        <div class="client-status-badge client-status-inactive">
+          <span class="client-status-dot inactive"></span>
+          Client access: Not configured
+        </div>
+        <p class="modal-info" style="margin-bottom:14px;">Set a password to give your client access to edit this site.</p>
+        <div class="modal-field">
+          <label>Client name</label>
+          <input type="text" id="manage-client-name" class="input" placeholder="e.g. רועי" value="${escapeHtml(clientName)}">
+        </div>
+        <div class="modal-field">
+          <label>Password (min 8 chars)</label>
+          <div class="modal-row">
+            <input type="password" id="manage-client-pw" class="input" placeholder="Enter password">
+            <button class="btn-primary btn-small" id="manage-btn-set-pw">Set password</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   function openSiteManageModal(site) {
     const status = getSiteStatus(site);
     const publishDate = site.publishedAt ? new Date(site.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
@@ -443,30 +511,7 @@
 
       <!-- Client tab -->
       <div class="modal-tab-content" id="mtab-client">
-        <div class="modal-field">
-          <label>Client Name (shown on login)</label>
-          <input type="text" id="manage-client-name" class="input" placeholder="Client name" value="${escapeHtml(site.clientDisplayName || '')}">
-        </div>
-        <div class="modal-field">
-          <label>Set Password</label>
-          <div class="modal-row">
-            <input type="password" id="manage-client-pw" class="input" placeholder="Min. 8 characters">
-            <button class="btn-primary btn-small" id="manage-btn-set-pw">Set</button>
-          </div>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:14px;">
-          <input type="checkbox" id="manage-approval" ${site.requireApproval ? 'checked' : ''}>
-          <label>Require my approval before changes go live</label>
-        </div>
-        <div class="modal-divider"></div>
-        <div class="modal-field">
-          <label>Client Editor URL</label>
-          <div class="client-url-display">
-            <code>${window.location.origin}/editor/?site=${site.siteId}</code>
-            <button class="btn-secondary btn-small" id="manage-btn-copy-url" data-url="${window.location.origin}/editor/?site=${site.siteId}">Copy</button>
-          </div>
-        </div>
-        <button class="btn-secondary btn-small" id="manage-btn-gen-token" style="margin-top:8px;">Generate one-click private link</button>
+        <div id="client-tab-content">${renderClientTabHtml(site)}</div>
       </div>
 
       <!-- Publishing tab -->
@@ -558,67 +603,8 @@
     }
 
     // Client — Set password
-    const btnSetPw = modalBody.querySelector('#manage-btn-set-pw');
-    if (btnSetPw) {
-      btnSetPw.addEventListener('click', async () => {
-        const pw = modalBody.querySelector('#manage-client-pw').value;
-        if (pw.length < 8) return showToast('Password must be at least 8 characters', 'error');
-        try {
-          const res = await fetch(`${API}/${siteId}/password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pw }),
-          });
-          if (res.ok) {
-            showToast('Password set', 'success');
-            modalBody.querySelector('#manage-client-pw').value = '';
-            loadSites();
-          } else {
-            const data = await res.json();
-            showToast(data.error?.message || 'Failed', 'error');
-          }
-        } catch {
-          showToast('Connection error', 'error');
-        }
-      });
-    }
+    bindClientTabEvents(site);
 
-    // Client — Name blur save
-    const clientNameInput = modalBody.querySelector('#manage-client-name');
-    if (clientNameInput) {
-      clientNameInput.addEventListener('change', () => {
-        saveClientName(siteId, clientNameInput.value.trim());
-      });
-    }
-
-    // Client — Copy URL
-    const btnCopyUrl = modalBody.querySelector('#manage-btn-copy-url');
-    if (btnCopyUrl) {
-      btnCopyUrl.addEventListener('click', () => {
-        navigator.clipboard.writeText(btnCopyUrl.dataset.url).then(() => {
-          btnCopyUrl.textContent = 'Copied!';
-          setTimeout(() => { btnCopyUrl.textContent = 'Copy'; }, 1500);
-        });
-      });
-    }
-
-    // Client — Generate token
-    const btnGenToken = modalBody.querySelector('#manage-btn-gen-token');
-    if (btnGenToken) {
-      btnGenToken.addEventListener('click', async () => {
-        try {
-          const res = await fetch(`${API}/${siteId}/access-token`, { method: 'POST' });
-          const data = await res.json();
-          if (res.ok && data.token) {
-            const url = `${window.location.origin}/editor/?site=${siteId}&token=${data.token}`;
-            navigator.clipboard.writeText(url);
-            showToast('Private link copied to clipboard', 'success');
-          }
-        } catch {
-          showToast('Failed to generate link', 'error');
-        }
-      });
-    }
 
     // Publishing — Save Vercel project
     const btnSaveVercel = modalBody.querySelector('#manage-btn-save-vercel');
@@ -673,11 +659,89 @@
     }
   }
 
+  function bindClientTabEvents(site) {
+    const siteId = site.siteId;
+
+    // Change password toggle
+    const btnChangePw = modalBody.querySelector('#manage-btn-change-pw');
+    if (btnChangePw) {
+      btnChangePw.addEventListener('click', () => {
+        const form = modalBody.querySelector('#change-pw-form');
+        if (form) form.classList.toggle('hidden');
+      });
+    }
+
+    // Set/update password
+    const btnSetPw = modalBody.querySelector('#manage-btn-set-pw');
+    if (btnSetPw) {
+      btnSetPw.addEventListener('click', async () => {
+        const pw = modalBody.querySelector('#manage-client-pw').value;
+        if (pw.length < 8) return showToast('Password must be at least 8 characters', 'error');
+
+        const clientNameInput = modalBody.querySelector('#manage-client-name');
+        if (clientNameInput) {
+          await saveClientName(siteId, clientNameInput.value.trim());
+        }
+
+        try {
+          const res = await fetch(`${API}/${siteId}/password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw }),
+          });
+          if (res.ok) {
+            showToast('Password set', 'success');
+            // Refresh the site data and re-render client tab
+            const siteRes = await fetch(`${API}/${siteId}`);
+            if (siteRes.ok) {
+              const updatedSite = await siteRes.json();
+              const container = modalBody.querySelector('#client-tab-content');
+              if (container) {
+                container.innerHTML = renderClientTabHtml(updatedSite);
+                bindClientTabEvents(updatedSite);
+                const successEl = modalBody.querySelector('#client-pw-success');
+                if (successEl) {
+                  successEl.classList.remove('hidden');
+                  setTimeout(() => successEl.classList.add('hidden'), 3000);
+                }
+              }
+            }
+            loadSites();
+          } else {
+            const data = await res.json();
+            showToast(data.error?.message || 'Failed', 'error');
+          }
+        } catch {
+          showToast('Connection error', 'error');
+        }
+      });
+    }
+
+    // Name auto-save on blur
+    const clientNameInput = modalBody.querySelector('#manage-client-name');
+    if (clientNameInput) {
+      clientNameInput.addEventListener('change', () => {
+        saveClientName(siteId, clientNameInput.value.trim());
+      });
+    }
+
+    // Copy URL
+    const btnCopyUrl = modalBody.querySelector('#manage-btn-copy-url');
+    if (btnCopyUrl) {
+      btnCopyUrl.addEventListener('click', () => {
+        navigator.clipboard.writeText(btnCopyUrl.dataset.url).then(() => {
+          btnCopyUrl.textContent = 'Copied!';
+          setTimeout(() => { btnCopyUrl.textContent = 'Copy'; }, 1500);
+        });
+      });
+    }
+  }
+
   async function loadSiteHistory(siteId) {
     const container = modalBody.querySelector('#manage-history-list');
     if (!container) return;
     try {
-      const res = await fetch(`${API}/${siteId}/history`);
+      const res = await fetch(`${API}/${siteId}/versions`);
       if (!res.ok) {
         container.innerHTML = '<p class="modal-info">Could not load history.</p>';
         return;
@@ -688,19 +752,50 @@
         container.innerHTML = '<p class="modal-info">No versions yet. Save changes in the editor to create versions.</p>';
         return;
       }
-      container.innerHTML = '<ul class="modal-history-list">' + versions.map(v => {
-        const date = new Date(v.createdAt || v.savedAt).toLocaleDateString('en-US', {
+      container.innerHTML = '<ul class="modal-history-list">' + versions.map((v, i) => {
+        // versions can be strings (timestamp IDs) or objects with createdAt
+        const versionId = typeof v === 'string' ? v : (v.versionId || v._id || '');
+        const dateStr = typeof v === 'string' ? v.replace(/-/g, (m, offset) => {
+          if (offset === 4 || offset === 7) return '-';
+          if (offset === 10) return 'T';
+          if (offset === 13 || offset === 16) return ':';
+          if (offset === 19) return '.';
+          return m;
+        }) : (v.createdAt || v.savedAt);
+        const date = new Date(dateStr);
+        const formatted = isNaN(date.getTime()) ? versionId : date.toLocaleDateString('en-US', {
           month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
         });
-        const badge = v.published
-          ? '<span class="modal-history-badge published">published</span>'
-          : '<span class="modal-history-badge">draft</span>';
-        return `<li class="modal-history-item"><span class="modal-history-date">${date}</span>${badge}</li>`;
+        const num = versions.length - i;
+        return `<li class="modal-history-item">
+          <div>
+            <span class="modal-history-version">v${num}</span>
+            <span class="modal-history-date">${formatted}</span>
+          </div>
+          <button class="btn-secondary btn-small" onclick="window.__restoreVersion('${siteId}','${versionId}')">Restore</button>
+        </li>`;
       }).join('') + '</ul>';
     } catch {
       container.innerHTML = '<p class="modal-info">Could not load history.</p>';
     }
   }
+
+  window.__restoreVersion = async function(siteId, versionId) {
+    if (!confirm('Restore this version? Current content will be saved as a new version first.')) return;
+    try {
+      const res = await fetch(`${API}/${siteId}/rollback/${versionId}`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Version restored', 'success');
+        loadSiteHistory(siteId);
+        loadSites();
+      } else {
+        const data = await res.json();
+        showToast(data.error?.message || 'Restore failed', 'error');
+      }
+    } catch {
+      showToast('Connection error', 'error');
+    }
+  };
 
   // ══════════════════════════════════════
   // Site Actions (standalone)

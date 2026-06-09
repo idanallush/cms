@@ -900,6 +900,62 @@ body {
   color: #22c55e;
 }
 
+/* Client tab status */
+.client-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.client-status-badge.client-status-active {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.client-status-badge.client-status-inactive {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.client-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.client-status-dot.active {
+  background: #22c55e;
+}
+
+.client-status-dot.inactive {
+  background: #ef4444;
+}
+
+/* History version number */
+.modal-history-version {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ccc;
+  margin-right: 8px;
+}
+
+.modal-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #1f1f1f;
+  font-size: 12px;
+}
+
 /* Mobile */
 @media (max-width: 640px) {
   .dashboard {
