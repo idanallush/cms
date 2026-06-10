@@ -237,7 +237,7 @@ export async function getSettings(req, res) {
     ai: {
       connected: hasAiKey,
       provider: settings.ai_provider || 'openrouter',
-      model: settings.ai_model || 'anthropic/claude-sonnet-4.5',
+      model: settings.ai_model || 'openai/gpt-4o-mini',
     },
     vercel: {
       connected: hasVercelToken,

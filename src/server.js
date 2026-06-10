@@ -11,6 +11,7 @@ import authRouter from './routes/auth.js';
 import editorRouter from './routes/editor.js';
 import publishRouter from './routes/publish.js';
 import chatRouter from './routes/chat.js';
+import uploadRouter from './routes/upload.js';
 import { requireOwner } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getStore } from './storage/index.js';
@@ -59,6 +60,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/sites', sitesRouter);
 app.use('/api/sites', publishRouter);
 app.use('/api/sites', chatRouter);
+app.use('/api/sites', uploadRouter);
 app.use('/editor', editorRouter);
 
 app.get('/login', (req, res) => {

@@ -82,6 +82,20 @@
               <textarea id="prop-text-input" class="prop-textarea" rows="3"></textarea>
             </div>
             <div id="prop-image-section" class="prop-section hidden">
+              <label class="prop-label">Image</label>
+              <div class="image-upload-area">
+                <div class="image-preview-box" id="image-preview-box">
+                  <img id="image-preview-img" src="" alt="" class="hidden">
+                  <span id="image-preview-placeholder" class="image-preview-placeholder">No image</span>
+                </div>
+                <div class="image-upload-controls">
+                  <label class="upload-btn toolbar-btn btn-secondary" id="upload-label">
+                    Upload
+                    <input type="file" id="prop-img-upload" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" class="hidden-file-input">
+                  </label>
+                  <span id="upload-status" class="upload-status"></span>
+                </div>
+              </div>
               <label class="prop-label">Image URL</label>
               <input type="text" id="prop-img-src" class="prop-input" placeholder="https://...">
               <label class="prop-label">Alt Text</label>
@@ -171,6 +185,45 @@
                   <option value="700">Bold</option>
                   <option value="900">Black</option>
                 </select>
+              </div>
+              <div class="style-slider-group">
+                <label>Font Style</label>
+                <select id="style-fontStyle" class="prop-select">
+                  <option value="">Default</option>
+                  <option value="normal">Normal</option>
+                  <option value="italic">Italic</option>
+                </select>
+              </div>
+            </div>
+            <div class="prop-section">
+              <div class="prop-section-title">Appearance</div>
+              <div class="style-slider-group">
+                <label>Color</label>
+                <div class="color-picker-row">
+                  <input type="color" id="style-color" value="#000000" class="color-picker-input">
+                  <input type="text" id="style-color-text" class="color-text-input" placeholder="#000000">
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Background Color</label>
+                <div class="color-picker-row">
+                  <input type="color" id="style-backgroundColor" value="#ffffff" class="color-picker-input">
+                  <input type="text" id="style-backgroundColor-text" class="color-text-input" placeholder="#ffffff">
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Border Radius</label>
+                <div class="slider-row">
+                  <input type="range" id="style-borderRadius" min="0" max="100" value="0" class="style-slider">
+                  <span class="slider-value" id="val-borderRadius">0px</span>
+                </div>
+              </div>
+              <div class="style-slider-group">
+                <label>Opacity</label>
+                <div class="slider-row">
+                  <input type="range" id="style-opacity" min="0" max="100" value="100" class="style-slider">
+                  <span class="slider-value" id="val-opacity">1</span>
+                </div>
               </div>
             </div>
             <button id="style-apply" class="toolbar-btn btn-primary prop-apply-btn">Apply styles</button>
