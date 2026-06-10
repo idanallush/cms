@@ -4,13 +4,28 @@ const { Schema, model } = mongoose;
 
 // ── Schemas ──
 
+const pageSchema = new Schema({
+  pageId: { type: String, required: true },
+  slug: { type: String, required: true },
+  title: { type: String, required: true },
+  isIndex: { type: Boolean, default: false },
+  frozenTemplate: { type: String, default: '' },
+  contentMap: { type: Schema.Types.Mixed, default: {} },
+  styles: { type: Schema.Types.Mixed, default: {} },
+  seo: { type: Schema.Types.Mixed, default: {} },
+  slotCount: { type: Number, default: 0 },
+}, { _id: false });
+
 const siteSchema = new Schema({
   siteId: { type: String, required: true, unique: true, index: true },
   name: { type: String, required: true },
   originalUrl: { type: String, required: true },
+  // Legacy fields kept for migration
   frozenTemplate: { type: String, default: '' },
   contentMap: { type: Schema.Types.Mixed, default: {} },
   slotCount: { type: Number, default: 0 },
+  // Pages array (new multi-page model)
+  pages: { type: [pageSchema], default: [] },
   clientPasswordHash: { type: String, default: null },
   clientDisplayName: { type: String, default: null },
   clientHasAccessed: { type: Boolean, default: false },
@@ -275,4 +290,136 @@ export async function getAllSettings() {
     result[doc.key] = doc.value;
   }
   return result;
+}
+
+// ── Multi-page support ──
+
+async function migrateSiteToPages(site) {
+  if (site.pages && site.pages.length > 0) return site;
+  if (!site.frozenTemplate && !site.contentMap) return site;
+
+  const { v4: uuidv4 } = await import('uuid');
+  const indexPage = {
+    pageId: uuidv4(),
+    slug: 'index',
+    title: 'Home',
+    isIndex: true,
+    frozenTemplate: site.frozenTemplate || '',
+    contentMap: site.contentMap || {},
+    styles: site.styles || {},
+    seo: site.seo || {},
+    slotCount: site.slotCount || 0,
+  };
+
+  await Site.updateOne({ siteId: site.siteId }, {
+    $set: { pages: [indexPage] },
+  });
+
+  console.log(`[migration] Site ${site.siteId} migrated to pages format`);
+  site.pages = [indexPage];
+  return site;
+}
+
+export async function getPages(siteId) {
+  let site = await Site.findOne({ siteId }).lean();
+  if (!site) return null;
+  site = await migrateSiteToPages(site);
+  return (site.pages || []).map(p => ({
+    pageId: p.pageId,
+    slug: p.slug,
+    title: p.title,
+    isIndex: p.isIndex,
+    slotCount: p.slotCount || Object.keys(p.contentMap || {}).length,
+  }));
+}
+
+export async function getPage(siteId, pageId) {
+  let site = await Site.findOne({ siteId }).lean();
+  if (!site) return null;
+  site = await migrateSiteToPages(site);
+  return (site.pages || []).find(p => p.pageId === pageId) || null;
+}
+
+export async function getIndexPage(siteId) {
+  let site = await Site.findOne({ siteId }).lean();
+  if (!site) return null;
+  site = await migrateSiteToPages(site);
+  return (site.pages || []).find(p => p.isIndex) || (site.pages || [])[0] || null;
+}
+
+export async function addPage(siteId, page) {
+  let site = await Site.findOne({ siteId });
+  if (!site) return null;
+  const siteObj = site.toObject();
+  await migrateSiteToPages(siteObj);
+  await site.updateOne({ $push: { pages: page } });
+  return page;
+}
+
+export async function updatePage(siteId, pageId, updates) {
+  const setFields = {};
+  for (const [key, value] of Object.entries(updates)) {
+    setFields[`pages.$.${key}`] = value;
+  }
+  const result = await Site.updateOne(
+    { siteId, 'pages.pageId': pageId },
+    { $set: setFields }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function deletePage(siteId, pageId) {
+  const site = await Site.findOne({ siteId }).lean();
+  if (!site) return false;
+  const page = (site.pages || []).find(p => p.pageId === pageId);
+  if (!page || page.isIndex) return false;
+  const result = await Site.updateOne(
+    { siteId },
+    { $pull: { pages: { pageId } } }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function getPageContent(siteId, pageId) {
+  const page = await getPage(siteId, pageId);
+  return page?.contentMap || null;
+}
+
+export async function savePageContent(siteId, pageId, contentMap) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  await Version.create({ siteId, contentMap, createdAt: new Date() });
+  await Site.updateOne(
+    { siteId, 'pages.pageId': pageId },
+    { $set: { 'pages.$.contentMap': contentMap } }
+  );
+  return timestamp;
+}
+
+export async function getPageTemplate(siteId, pageId) {
+  const page = await getPage(siteId, pageId);
+  return page?.frozenTemplate || null;
+}
+
+export async function getPageStyles(siteId, pageId) {
+  const page = await getPage(siteId, pageId);
+  return page?.styles || {};
+}
+
+export async function savePageStyles(siteId, pageId, styles) {
+  await Site.updateOne(
+    { siteId, 'pages.pageId': pageId },
+    { $set: { 'pages.$.styles': styles } }
+  );
+}
+
+export async function getPageSeo(siteId, pageId) {
+  const page = await getPage(siteId, pageId);
+  return page?.seo || {};
+}
+
+export async function savePageSeo(siteId, pageId, seo) {
+  await Site.updateOne(
+    { siteId, 'pages.pageId': pageId },
+    { $set: { 'pages.$.seo': seo } }
+  );
 }

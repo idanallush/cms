@@ -37,6 +37,19 @@ export async function ingestSite(req, res) {
   }
 
   const siteId = uuidv4();
+  const indexPageId = uuidv4();
+  const pages = [{
+    pageId: indexPageId,
+    slug: 'index',
+    title: 'Home',
+    isIndex: true,
+    frozenTemplate,
+    contentMap,
+    styles: {},
+    seo: {},
+    slotCount: Object.keys(contentMap).length,
+  }];
+
   const meta = {
     siteId,
     name: name || (url ? new URL(url).hostname : 'Pasted Site'),
@@ -44,6 +57,7 @@ export async function ingestSite(req, res) {
     createdAt: new Date().toISOString(),
     lastEditedAt: new Date().toISOString(),
     slotCount: Object.keys(contentMap).length,
+    pages,
     clientPasswordHash: null,
     clientDisplayName: null,
     customDomain: null,
@@ -71,15 +85,25 @@ export async function getSite(req, res) {
 
 export async function getContent(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   if (!(await store.siteExists(siteId))) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
-  const content = await store.getContent(siteId);
+
+  let content;
+  if (pageId) {
+    content = await store.getPageContent(siteId, pageId);
+    if (content === null) return res.status(404).json({ error: { message: 'Page not found' } });
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    content = indexPage ? indexPage.contentMap : await store.getContent(siteId);
+  }
   res.json(content);
 }
 
 export async function updateContent(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   const changes = req.body;
 
   if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
@@ -90,7 +114,19 @@ export async function updateContent(req, res) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
 
-  const currentContent = await store.getContent(siteId);
+  let currentContent;
+  if (pageId) {
+    currentContent = await store.getPageContent(siteId, pageId);
+    if (currentContent === null) return res.status(404).json({ error: { message: 'Page not found' } });
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      currentContent = indexPage.contentMap;
+    } else {
+      currentContent = await store.getContent(siteId);
+    }
+  }
+
   const result = validateChanges(changes, currentContent);
 
   if (!result.valid) {
@@ -101,10 +137,23 @@ export async function updateContent(req, res) {
   }
 
   const updatedContent = { ...currentContent, ...result.sanitizedChanges };
-  const versionId = await store.saveContent(siteId, updatedContent);
-  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
 
-  res.json({ valid: true, versionId, updatedSlots: Object.keys(result.sanitizedChanges) });
+  if (pageId) {
+    const versionId = await store.savePageContent(siteId, pageId, updatedContent);
+    await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+    res.json({ valid: true, versionId, updatedSlots: Object.keys(result.sanitizedChanges) });
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      const versionId = await store.savePageContent(siteId, indexPage.pageId, updatedContent);
+      await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+      res.json({ valid: true, versionId, updatedSlots: Object.keys(result.sanitizedChanges) });
+    } else {
+      const versionId = await store.saveContent(siteId, updatedContent);
+      await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+      res.json({ valid: true, versionId, updatedSlots: Object.keys(result.sanitizedChanges) });
+    }
+  }
 }
 
 export async function listVersions(req, res) {
@@ -133,13 +182,31 @@ export async function rollback(req, res) {
 
 export async function preview(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   if (!(await store.siteExists(siteId))) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
 
-  const template = await store.getTemplate(siteId);
-  const content = await store.getContent(siteId);
-  const styles = await store.getStyles(siteId);
+  let template, content, styles;
+  if (pageId) {
+    const page = await store.getPage(siteId, pageId);
+    if (!page) return res.status(404).json({ error: { message: 'Page not found' } });
+    template = page.frozenTemplate;
+    content = page.contentMap;
+    styles = page.styles;
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      template = indexPage.frozenTemplate;
+      content = indexPage.contentMap;
+      styles = indexPage.styles;
+    } else {
+      template = await store.getTemplate(siteId);
+      content = await store.getContent(siteId);
+      styles = await store.getStyles(siteId);
+    }
+  }
+
   const html = renderTemplate(template, content, styles);
 
   res.removeHeader('X-Frame-Options');
@@ -150,13 +217,31 @@ export async function preview(req, res) {
 
 export async function render(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   if (!(await store.siteExists(siteId))) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
 
-  const template = await store.getTemplate(siteId);
-  const content = await store.getContent(siteId);
-  const styles = await store.getStyles(siteId);
+  let template, content, styles;
+  if (pageId) {
+    const page = await store.getPage(siteId, pageId);
+    if (!page) return res.status(404).json({ error: { message: 'Page not found' } });
+    template = page.frozenTemplate;
+    content = page.contentMap;
+    styles = page.styles;
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      template = indexPage.frozenTemplate;
+      content = indexPage.contentMap;
+      styles = indexPage.styles;
+    } else {
+      template = await store.getTemplate(siteId);
+      content = await store.getContent(siteId);
+      styles = await store.getStyles(siteId);
+    }
+  }
+
   const html = renderTemplate(template, content, styles);
 
   res.removeHeader('X-Frame-Options');
@@ -276,19 +361,253 @@ export async function updateSettings(req, res) {
   res.json(updated);
 }
 
-// ── SEO ──
+// ── Pages ──
 
-export async function getSeo(req, res) {
+export async function listPages(req, res) {
   const { siteId } = req.params;
   if (!(await store.siteExists(siteId))) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
-  const seo = await store.getSeo(siteId);
+  const pages = await store.getPages(siteId);
+  res.json({ pages });
+}
+
+export async function getPageDetail(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const page = await store.getPage(siteId, pageId);
+  if (!page) {
+    return res.status(404).json({ error: { message: 'Page not found' } });
+  }
+  res.json(page);
+}
+
+export async function createPage(req, res) {
+  const { siteId } = req.params;
+  const { title, slug, templateType } = req.body;
+
+  if (!title || !slug) {
+    return res.status(400).json({ error: { message: 'title and slug are required' } });
+  }
+
+  const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  if (!cleanSlug || cleanSlug === 'index') {
+    return res.status(400).json({ error: { message: 'Invalid slug' } });
+  }
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const pages = await store.getPages(siteId);
+  if (pages.find(p => p.slug === cleanSlug)) {
+    return res.status(409).json({ error: { message: 'A page with this slug already exists' } });
+  }
+
+  const indexPage = await store.getIndexPage(siteId);
+  const template = await buildPageTemplate(indexPage?.frozenTemplate, title, templateType || 'blank');
+  const { ingestHtml } = await import('../services/ingest.js');
+  const { frozenTemplate, contentMap } = await ingestHtml(template, undefined);
+
+  const page = {
+    pageId: uuidv4(),
+    slug: cleanSlug,
+    title,
+    isIndex: false,
+    frozenTemplate,
+    contentMap,
+    styles: {},
+    seo: { title },
+    slotCount: Object.keys(contentMap).length,
+  };
+
+  await store.addPage(siteId, page);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+
+  res.status(201).json(page);
+}
+
+async function buildPageTemplate(indexTemplate, pageTitle, templateType) {
+  const cheerio = await import('cheerio');
+  let headContent = '';
+  let headerHtml = '';
+  let footerHtml = '';
+
+  if (indexTemplate) {
+    const $ = cheerio.load(indexTemplate, { decodeEntities: false });
+    const headEl = $('head');
+    if (headEl.length) {
+      headEl.find('title').remove();
+      headContent = headEl.html() || '';
+    }
+    const header = $('header').first();
+    if (header.length) headerHtml = $.html(header);
+    const nav = $('nav').first();
+    if (!headerHtml && nav.length) headerHtml = $.html(nav);
+    const footer = $('footer').first();
+    if (footer.length) footerHtml = $.html(footer);
+  }
+
+  let bodyContent = '';
+  if (templateType === 'article') {
+    bodyContent = `
+    <article style="max-width:800px;margin:40px auto;padding:0 20px;">
+      <h1>${pageTitle}</h1>
+      <p style="color:#666;font-size:14px;">${new Date().toLocaleDateString()}</p>
+      <img src="https://placehold.co/800x400?text=Hero+Image" alt="Hero image" style="width:100%;border-radius:8px;margin:20px 0;">
+      <p>Start writing your article content here. This is a placeholder paragraph that you can edit using the CMS editor.</p>
+      <p>Add more paragraphs, images, and other content to build out your page.</p>
+    </article>`;
+  } else {
+    bodyContent = `
+    <main style="max-width:1200px;margin:40px auto;padding:0 20px;">
+      <h1>${pageTitle}</h1>
+      <p>This is a new page. Click on any element to start editing.</p>
+    </main>`;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  ${headContent}
+</head>
+<body>
+  ${headerHtml}
+  ${bodyContent}
+  ${footerHtml}
+</body>
+</html>`;
+}
+
+export async function deletePageHandler(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const page = await store.getPage(siteId, pageId);
+  if (!page) {
+    return res.status(404).json({ error: { message: 'Page not found' } });
+  }
+  if (page.isIndex) {
+    return res.status(400).json({ error: { message: 'Cannot delete the index page' } });
+  }
+  const deleted = await store.deletePage(siteId, pageId);
+  if (!deleted) {
+    return res.status(500).json({ error: { message: 'Failed to delete page' } });
+  }
+  res.json({ success: true });
+}
+
+export async function getPageContentHandler(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const content = await store.getPageContent(siteId, pageId);
+  if (content === null) {
+    return res.status(404).json({ error: { message: 'Page not found' } });
+  }
+  res.json(content);
+}
+
+export async function updatePageContent(req, res) {
+  const { siteId, pageId } = req.params;
+  const changes = req.body;
+
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+    return res.status(400).json({ error: { message: 'Body must be an object of {slotId: newValue}' } });
+  }
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const currentContent = await store.getPageContent(siteId, pageId);
+  if (currentContent === null) {
+    return res.status(404).json({ error: { message: 'Page not found' } });
+  }
+
+  const result = validateChanges(changes, currentContent);
+  if (!result.valid) {
+    return res.status(422).json({ valid: false, errors: result.errors });
+  }
+
+  const updatedContent = { ...currentContent, ...result.sanitizedChanges };
+  const versionId = await store.savePageContent(siteId, pageId, updatedContent);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+
+  res.json({ valid: true, versionId, updatedSlots: Object.keys(result.sanitizedChanges) });
+}
+
+export async function renderPage(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const page = await store.getPage(siteId, pageId);
+  if (!page) {
+    return res.status(404).json({ error: { message: 'Page not found' } });
+  }
+
+  const { renderTemplate } = await import('../services/template.js');
+  const html = renderTemplate(page.frozenTemplate, page.contentMap, page.styles);
+
+  res.removeHeader('X-Frame-Options');
+  res.removeHeader('Content-Security-Policy');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+}
+
+export async function getPageStylesHandler(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const styles = await store.getPageStyles(siteId, pageId);
+  res.json(styles);
+}
+
+export async function savePageStylesHandler(req, res) {
+  const { siteId, pageId } = req.params;
+  const styles = req.body;
+
+  if (!styles || typeof styles !== 'object' || Array.isArray(styles)) {
+    return res.status(400).json({ error: { message: 'Body must be an object' } });
+  }
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const { validateStyleOverrides } = await import('../services/guardian.js');
+  const result = validateStyleOverrides(styles);
+  if (!result.valid) {
+    return res.status(422).json({ valid: false, errors: result.errors });
+  }
+
+  const existing = await store.getPageStyles(siteId, pageId);
+  const merged = { ...existing, ...result.sanitizedStyles };
+  await store.savePageStyles(siteId, pageId, merged);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+  res.json({ valid: true, styles: merged });
+}
+
+export async function getPageSeoHandler(req, res) {
+  const { siteId, pageId } = req.params;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+  const seo = await store.getPageSeo(siteId, pageId);
   res.json(seo);
 }
 
-export async function saveSeo(req, res) {
-  const { siteId } = req.params;
+export async function savePageSeoHandler(req, res) {
+  const { siteId, pageId } = req.params;
   const { title, description, ogImage, canonicalUrl, noIndex } = req.body;
 
   if (!(await store.siteExists(siteId))) {
@@ -302,7 +621,56 @@ export async function saveSeo(req, res) {
   if (canonicalUrl !== undefined) seo.canonicalUrl = String(canonicalUrl);
   if (noIndex !== undefined) seo.noIndex = !!noIndex;
 
-  await store.saveSeo(siteId, seo);
+  await store.savePageSeo(siteId, pageId, seo);
+  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+  res.json({ success: true, seo });
+}
+
+// ── SEO ──
+
+export async function getSeo(req, res) {
+  const { siteId } = req.params;
+  const pageId = req.query.pageId;
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  if (pageId) {
+    const seo = await store.getPageSeo(siteId, pageId);
+    res.json(seo);
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    const seo = indexPage ? (indexPage.seo || {}) : await store.getSeo(siteId);
+    res.json(seo);
+  }
+}
+
+export async function saveSeo(req, res) {
+  const { siteId } = req.params;
+  const pageId = req.query.pageId;
+  const { title, description, ogImage, canonicalUrl, noIndex } = req.body;
+
+  if (!(await store.siteExists(siteId))) {
+    return res.status(404).json({ error: { message: 'Site not found' } });
+  }
+
+  const seo = {};
+  if (title !== undefined) seo.title = String(title).slice(0, 120);
+  if (description !== undefined) seo.description = String(description).slice(0, 320);
+  if (ogImage !== undefined) seo.ogImage = String(ogImage);
+  if (canonicalUrl !== undefined) seo.canonicalUrl = String(canonicalUrl);
+  if (noIndex !== undefined) seo.noIndex = !!noIndex;
+
+  if (pageId) {
+    await store.savePageSeo(siteId, pageId, seo);
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      await store.savePageSeo(siteId, indexPage.pageId, seo);
+    } else {
+      await store.saveSeo(siteId, seo);
+    }
+  }
   await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
   res.json({ success: true, seo });
 }
@@ -311,15 +679,24 @@ export async function saveSeo(req, res) {
 
 export async function getStyles(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   if (!(await store.siteExists(siteId))) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
-  const styles = await store.getStyles(siteId);
-  res.json(styles);
+
+  if (pageId) {
+    const styles = await store.getPageStyles(siteId, pageId);
+    res.json(styles);
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    const styles = indexPage ? (indexPage.styles || {}) : await store.getStyles(siteId);
+    res.json(styles);
+  }
 }
 
 export async function saveStyles(req, res) {
   const { siteId } = req.params;
+  const pageId = req.query.pageId;
   const styles = req.body;
 
   if (!styles || typeof styles !== 'object' || Array.isArray(styles)) {
@@ -330,19 +707,34 @@ export async function saveStyles(req, res) {
     return res.status(404).json({ error: { message: 'Site not found' } });
   }
 
-  // Validate style overrides via guardian
   const { validateStyleOverrides } = await import('../services/guardian.js');
   const result = validateStyleOverrides(styles);
   if (!result.valid) {
     return res.status(422).json({ valid: false, errors: result.errors });
   }
 
-  // Merge with existing styles
-  const existing = await store.getStyles(siteId);
-  const merged = { ...existing, ...result.sanitizedStyles };
-  await store.saveStyles(siteId, merged);
-  await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
-  res.json({ valid: true, styles: merged });
+  if (pageId) {
+    const existing = await store.getPageStyles(siteId, pageId);
+    const merged = { ...existing, ...result.sanitizedStyles };
+    await store.savePageStyles(siteId, pageId, merged);
+    await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+    res.json({ valid: true, styles: merged });
+  } else {
+    const indexPage = await store.getIndexPage(siteId);
+    if (indexPage) {
+      const existing = indexPage.styles || {};
+      const merged = { ...existing, ...result.sanitizedStyles };
+      await store.savePageStyles(siteId, indexPage.pageId, merged);
+      await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+      res.json({ valid: true, styles: merged });
+    } else {
+      const existing = await store.getStyles(siteId);
+      const merged = { ...existing, ...result.sanitizedStyles };
+      await store.saveStyles(siteId, merged);
+      await store.updateMeta(siteId, { lastEditedAt: new Date().toISOString() });
+      res.json({ valid: true, styles: merged });
+    }
+  }
 }
 
 export async function saveGlobalSettings(req, res) {

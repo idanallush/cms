@@ -24,6 +24,10 @@ const methods = [
   'siteExists', 'listAllSites', 'deleteSite', 'updateMeta',
   'getSetting', 'setSetting', 'getAllSettings',
   'saveSeo', 'getSeo', 'saveStyles', 'getStyles',
+  // Multi-page methods
+  'getPages', 'getPage', 'getIndexPage', 'addPage', 'updatePage', 'deletePage',
+  'getPageContent', 'savePageContent', 'getPageTemplate',
+  'getPageStyles', 'savePageStyles', 'getPageSeo', 'savePageSeo',
 ];
 
 const proxyStore = {};
@@ -41,4 +45,7 @@ export const {
   siteExists, listAllSites, deleteSite, updateMeta,
   getSetting, setSetting, getAllSettings,
   saveSeo, getSeo, saveStyles, getStyles,
+  getPages, getPage, getIndexPage, addPage, updatePage, deletePage,
+  getPageContent, savePageContent, getPageTemplate,
+  getPageStyles, savePageStyles, getPageSeo, savePageSeo,
 } = proxyStore;

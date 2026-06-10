@@ -12,6 +12,12 @@
       <a href="/dashboard" class="toolbar-back" title="Back to dashboard">&larr;</a>
       <span id="site-name" class="toolbar-site-name">Loading...</span>
       <a id="site-url" class="toolbar-site-url" href="#" target="_blank" rel="noopener"></a>
+      <div class="page-switcher" id="page-switcher">
+        <select id="page-select" class="page-select" title="Switch page">
+          <option value="">Loading...</option>
+        </select>
+        <button id="btn-add-page" class="toolbar-btn btn-secondary btn-add-page" title="Add page">+ Page</button>
+      </div>
     </div>
     <div class="toolbar-center">
       <div class="mode-toggle" id="mode-toggle">
@@ -327,6 +333,31 @@
         <button id="btn-send-chat" class="chat-send-btn" disabled title="Send">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Page Modal -->
+  <div id="add-page-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Add New Page</h3>
+        <button id="modal-close" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="prop-label">Page Title</label>
+        <input type="text" id="new-page-title" class="prop-input" placeholder="About Us">
+        <label class="prop-label">Slug (URL path)</label>
+        <input type="text" id="new-page-slug" class="prop-input" placeholder="about-us">
+        <label class="prop-label">Template</label>
+        <select id="new-page-template" class="prop-select">
+          <option value="blank">Blank Page</option>
+          <option value="article">Article / Blog Post</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-cancel" class="toolbar-btn btn-secondary">Cancel</button>
+        <button id="modal-create" class="toolbar-btn btn-primary">Create Page</button>
       </div>
     </div>
   </div>

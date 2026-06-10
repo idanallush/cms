@@ -23,6 +23,19 @@ router.get('/:siteId/seo', requireSiteAccess, asyncHandler(ctrl.getSeo));
 router.put('/:siteId/seo', requireSiteAccess, asyncHandler(ctrl.saveSeo));
 router.get('/:siteId/styles', requireSiteAccess, asyncHandler(ctrl.getStyles));
 router.put('/:siteId/styles', requireSiteAccess, asyncHandler(ctrl.saveStyles));
+// Pages
+router.get('/:siteId/pages', requireSiteAccess, asyncHandler(ctrl.listPages));
+router.post('/:siteId/pages', requireOwner, asyncHandler(ctrl.createPage));
+router.get('/:siteId/pages/:pageId', requireSiteAccess, asyncHandler(ctrl.getPageDetail));
+router.delete('/:siteId/pages/:pageId', requireOwner, asyncHandler(ctrl.deletePageHandler));
+router.get('/:siteId/pages/:pageId/content', requireSiteAccess, asyncHandler(ctrl.getPageContentHandler));
+router.put('/:siteId/pages/:pageId/content', requireSiteAccess, asyncHandler(ctrl.updatePageContent));
+router.get('/:siteId/pages/:pageId/render', requireSiteAccess, asyncHandler(ctrl.renderPage));
+router.get('/:siteId/pages/:pageId/styles', requireSiteAccess, asyncHandler(ctrl.getPageStylesHandler));
+router.put('/:siteId/pages/:pageId/styles', requireSiteAccess, asyncHandler(ctrl.savePageStylesHandler));
+router.get('/:siteId/pages/:pageId/seo', requireSiteAccess, asyncHandler(ctrl.getPageSeoHandler));
+router.put('/:siteId/pages/:pageId/seo', requireSiteAccess, asyncHandler(ctrl.savePageSeoHandler));
+
 router.delete('/:siteId', requireOwner, asyncHandler(ctrl.deleteSite));
 router.put('/:siteId/settings', requireOwner, asyncHandler(ctrl.updateSettings));
 router.post('/:siteId/password', requireOwner, asyncHandler(ctrl.setClientPassword));

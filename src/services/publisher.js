@@ -86,21 +86,44 @@ export async function publishToVercel(siteId) {
   const meta = await store.getMeta(siteId);
   if (!meta) throw new Error('Site not found');
 
-  const template = await store.getTemplate(siteId);
-  const content = await store.getContent(siteId);
-  if (!template || !content) throw new Error('Site has no content');
+  const pages = await store.getPages(siteId);
+  const files = [];
 
-  const styles = await store.getStyles(siteId);
-  const html = generatePublishHtml(template, content, meta, styles);
+  if (pages && pages.length > 0) {
+    for (const pageSummary of pages) {
+      const page = await store.getPage(siteId, pageSummary.pageId);
+      if (!page || !page.frozenTemplate) continue;
 
-  const deployPayload = {
-    files: [
-      {
-        file: 'index.html',
+      const pageMeta = { ...meta, seo: page.seo || {} };
+      const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles);
+
+      const filePath = page.isIndex || page.slug === 'index'
+        ? 'index.html'
+        : `${page.slug}/index.html`;
+
+      files.push({
+        file: filePath,
         data: Buffer.from(html).toString('base64'),
         encoding: 'base64',
-      },
-    ],
+      });
+    }
+  }
+
+  if (files.length === 0) {
+    const template = await store.getTemplate(siteId);
+    const content = await store.getContent(siteId);
+    if (!template || !content) throw new Error('Site has no content');
+    const styles = await store.getStyles(siteId);
+    const html = generatePublishHtml(template, content, meta, styles);
+    files.push({
+      file: 'index.html',
+      data: Buffer.from(html).toString('base64'),
+      encoding: 'base64',
+    });
+  }
+
+  const deployPayload = {
+    files,
     projectSettings: {
       framework: null,
     },

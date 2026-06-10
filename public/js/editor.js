@@ -76,6 +76,19 @@
   const btnModeEdit = document.getElementById('btn-mode-edit');
   const btnModePreview = document.getElementById('btn-mode-preview');
 
+  // Page switcher refs
+  const pageSelect = document.getElementById('page-select');
+  const btnAddPage = document.getElementById('btn-add-page');
+
+  // Add page modal refs
+  const addPageModal = document.getElementById('add-page-modal');
+  const newPageTitle = document.getElementById('new-page-title');
+  const newPageSlug = document.getElementById('new-page-slug');
+  const newPageTemplate = document.getElementById('new-page-template');
+  const modalCreate = document.getElementById('modal-create');
+  const modalCancel = document.getElementById('modal-cancel');
+  const modalClose = document.getElementById('modal-close');
+
   // ── State ──
   let editorMode = 'edit'; // 'edit' or 'preview'
   let contentMap = {};
@@ -89,6 +102,8 @@
   let publishing = false;
   let siteMeta = {};
   let previewBackBtn = null;
+  let pages = [];
+  let currentPageId = null;
 
   // ── Toast ──
   function showToast(message, type) {
@@ -203,24 +218,142 @@
     document.title = `Editor - ${siteMeta.name}`;
   }
 
+  // ── Load pages list ──
+  async function loadPages() {
+    try {
+      const res = await fetch(`${API}/pages`);
+      const data = await res.json();
+      pages = data.pages || [];
+    } catch { pages = []; }
+
+    if (pages.length > 0) {
+      pageSelect.innerHTML = '';
+      pages.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.pageId;
+        opt.textContent = p.title + (p.isIndex ? ' (Home)' : '');
+        pageSelect.appendChild(opt);
+      });
+      if (!currentPageId) {
+        const indexPage = pages.find(p => p.isIndex) || pages[0];
+        currentPageId = indexPage.pageId;
+      }
+      pageSelect.value = currentPageId;
+    } else {
+      pageSelect.innerHTML = '<option value="">Single page</option>';
+    }
+  }
+
   // ── Load content map ──
   async function loadContent() {
-    const res = await fetch(`${API}/content`);
+    const q = currentPageId ? `?pageId=${currentPageId}` : '';
+    const res = await fetch(`${API}/content${q}`);
     contentMap = await res.json();
   }
 
   // ── Load styles ──
   async function loadStyles() {
     try {
-      const res = await fetch(`${API}/styles`);
+      const q = currentPageId ? `?pageId=${currentPageId}` : '';
+      const res = await fetch(`${API}/styles${q}`);
       stylesMap = await res.json();
     } catch { stylesMap = {}; }
   }
 
   // ── Load iframe ──
   function loadIframe() {
-    iframe.src = `${API}/render`;
+    const q = currentPageId ? `?pageId=${currentPageId}` : '';
+    iframe.src = `${API}/render${q}`;
   }
+
+  // ── Page switching ──
+  pageSelect.addEventListener('change', async () => {
+    if (Object.keys(pendingChanges).length > 0 || Object.keys(pendingStyleChanges).length > 0) {
+      if (!confirm('You have unsaved changes. Discard and switch page?')) {
+        pageSelect.value = currentPageId;
+        return;
+      }
+    }
+    currentPageId = pageSelect.value;
+    pendingChanges = {};
+    pendingStyleChanges = {};
+    undoStack = [];
+    updateChangesUI();
+    deselectSlot();
+    await Promise.all([loadContent(), loadStyles()]);
+    loadIframe();
+  });
+
+  // ── Add Page Modal ──
+  btnAddPage.addEventListener('click', () => {
+    newPageTitle.value = '';
+    newPageSlug.value = '';
+    newPageTemplate.value = 'blank';
+    addPageModal.classList.remove('hidden');
+    newPageTitle.focus();
+  });
+
+  newPageTitle.addEventListener('input', () => {
+    const auto = newPageTitle.value.toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    newPageSlug.value = auto;
+  });
+
+  function closeAddPageModal() {
+    addPageModal.classList.add('hidden');
+  }
+
+  modalCancel.addEventListener('click', closeAddPageModal);
+  modalClose.addEventListener('click', closeAddPageModal);
+  addPageModal.addEventListener('click', (e) => {
+    if (e.target === addPageModal) closeAddPageModal();
+  });
+
+  modalCreate.addEventListener('click', async () => {
+    const title = newPageTitle.value.trim();
+    const slug = newPageSlug.value.trim();
+    const templateType = newPageTemplate.value;
+
+    if (!title) { showToast('Page title is required', 'error'); return; }
+    if (!slug) { showToast('Page slug is required', 'error'); return; }
+
+    modalCreate.textContent = 'Creating...';
+    modalCreate.disabled = true;
+
+    try {
+      const res = await fetch(`${API}/pages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, slug, templateType }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        closeAddPageModal();
+        showToast(`Page "${title}" created`, 'success');
+        currentPageId = data.pageId;
+        await loadPages();
+        pageSelect.value = currentPageId;
+        pendingChanges = {};
+        pendingStyleChanges = {};
+        undoStack = [];
+        updateChangesUI();
+        deselectSlot();
+        await Promise.all([loadContent(), loadStyles()]);
+        loadIframe();
+      } else {
+        showToast(data.error?.message || 'Failed to create page', 'error');
+      }
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    } finally {
+      modalCreate.textContent = 'Create Page';
+      modalCreate.disabled = false;
+    }
+  });
 
   // ── Edit/Preview Mode ──
   function switchToEditMode() {
@@ -1266,7 +1399,8 @@
   // ── SEO panel ──
   async function loadSeo() {
     try {
-      const res = await fetch(`${API}/seo`);
+      const q = currentPageId ? `?pageId=${currentPageId}` : '';
+      const res = await fetch(`${API}/seo${q}`);
       seoData = await res.json();
     } catch { seoData = {}; }
 
@@ -1317,7 +1451,8 @@
     seoSave.textContent = 'Saving...';
     seoSave.disabled = true;
     try {
-      const res = await fetch(`${API}/seo`, {
+      const q = currentPageId ? `?pageId=${currentPageId}` : '';
+      const res = await fetch(`${API}/seo${q}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1359,7 +1494,8 @@
         for (const [slotId, { newValue }] of Object.entries(pendingChanges)) {
           changes[slotId] = newValue;
         }
-        const res = await fetch(`${API}/content`, {
+        const q = currentPageId ? `?pageId=${currentPageId}` : '';
+        const res = await fetch(`${API}/content${q}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(changes),
@@ -1382,7 +1518,8 @@
 
       // Save style changes
       if (hasStyles) {
-        const res = await fetch(`${API}/styles`, {
+        const q = currentPageId ? `?pageId=${currentPageId}` : '';
+        const res = await fetch(`${API}/styles${q}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(pendingStyleChanges),
@@ -1780,6 +1917,7 @@
   async function init() {
     try {
       await loadMeta();
+      await loadPages();
       await Promise.all([loadContent(), loadStyles()]);
       loadIframe();
       loadPublishStatus();
