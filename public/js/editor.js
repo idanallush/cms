@@ -615,51 +615,43 @@
     }
   }
 
-  // ── Image upload ──
+  // ── Image upload (base64) ──
   const imgUploadInput = document.getElementById('prop-img-upload');
   const imagePreviewImg = document.getElementById('image-preview-img');
   const imagePreviewPlaceholder = document.getElementById('image-preview-placeholder');
   const uploadStatus = document.getElementById('upload-status');
 
   if (imgUploadInput) {
-    imgUploadInput.addEventListener('change', async (e) => {
+    imgUploadInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
-      if (file.size > 4 * 1024 * 1024) {
-        showToast('File too large. Maximum size is 4MB.', 'error');
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Image must be under 2MB', 'error');
         imgUploadInput.value = '';
         return;
       }
 
-      uploadStatus.textContent = 'Uploading...';
+      uploadStatus.textContent = 'Processing...';
       uploadStatus.className = 'upload-status uploading';
 
-      const formData = new FormData();
-      formData.append('image', file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target.result;
 
-      try {
-        const res = await fetch(`${API}/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await res.json();
+        propImgSrc.value = base64Url;
+        updateImagePreview(base64Url);
 
-        if (res.ok && data.success) {
-          propImgSrc.value = data.url;
-          updateImagePreview(data.url);
-          uploadStatus.textContent = 'Uploaded!';
-          uploadStatus.className = 'upload-status success';
-          setTimeout(() => { uploadStatus.textContent = ''; }, 2000);
-          showToast('Image uploaded. Click Apply to use it.', 'info');
-        } else {
-          uploadStatus.textContent = data.error?.message || 'Upload failed';
-          uploadStatus.className = 'upload-status error';
-        }
-      } catch (err) {
-        uploadStatus.textContent = 'Upload failed';
+        uploadStatus.textContent = 'Ready!';
+        uploadStatus.className = 'upload-status success';
+        setTimeout(() => { uploadStatus.textContent = ''; }, 2000);
+        showToast('Image loaded. Click Apply to use it.', 'info');
+      };
+      reader.onerror = () => {
+        uploadStatus.textContent = 'Failed to read file';
         uploadStatus.className = 'upload-status error';
-      }
+      };
+      reader.readAsDataURL(file);
 
       imgUploadInput.value = '';
     });
@@ -1467,22 +1459,139 @@
   }
 
   // ── AI Chat ──
+  const btnClearChat = document.getElementById('btn-clear-chat');
+
+  // Rotating placeholder prompts
+  const chatPlaceholders = [
+    'שנה את הכותרת הראשית ל...',
+    'הפוך את הכפתור לבולט יותר',
+    'תקן שגיאת כתיב בפסקה השנייה',
+    'שנה את מספר הטלפון ל...',
+    'Change the hero heading to...',
+    "Make the CTA button say 'Get Started'",
+    'Fix the typo in the about section',
+  ];
+  let placeholderIndex = 0;
+  let placeholderInterval = null;
+
+  function startPlaceholderRotation() {
+    chatInput.setAttribute('placeholder', chatPlaceholders[0]);
+    placeholderInterval = setInterval(() => {
+      placeholderIndex = (placeholderIndex + 1) % chatPlaceholders.length;
+      chatInput.setAttribute('placeholder', chatPlaceholders[placeholderIndex]);
+    }, 3000);
+  }
+
+  function stopPlaceholderRotation() {
+    if (placeholderInterval) {
+      clearInterval(placeholderInterval);
+      placeholderInterval = null;
+    }
+  }
+
+  function formatTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Toggle chat panel — overlays the right panel
   btnChat.addEventListener('click', () => {
+    const isHidden = chatPanel.classList.contains('hidden');
     chatPanel.classList.toggle('hidden');
-    if (!chatPanel.classList.contains('hidden')) {
+    if (isHidden) {
       chatInput.focus();
+      startPlaceholderRotation();
+    } else {
+      stopPlaceholderRotation();
     }
   });
 
   btnCloseChat.addEventListener('click', () => {
     chatPanel.classList.add('hidden');
+    stopPlaceholderRotation();
+  });
+
+  // Clear chat
+  btnClearChat.addEventListener('click', () => {
+    chatMessages.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.className = 'chat-msg chat-msg-system';
+    msg.textContent = 'Tell me what you\'d like to change on the site.';
+    chatMessages.appendChild(msg);
+  });
+
+  // Enable/disable send button based on input
+  chatInput.addEventListener('input', () => {
+    btnSendChat.disabled = chatInput.value.trim().length === 0;
+    // Auto-resize textarea
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
   });
 
   function addChatMessage(text, type) {
     const msg = document.createElement('div');
     msg.className = `chat-msg chat-msg-${type}`;
-    msg.textContent = text;
+
+    const content = document.createElement('div');
+    content.textContent = text;
+    msg.appendChild(content);
+
+    if (type === 'user' || type === 'ai') {
+      const time = document.createElement('div');
+      time.className = 'chat-msg-time';
+      time.textContent = formatTime();
+      msg.appendChild(time);
+    }
+
     chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return msg;
+  }
+
+  function showThinkingIndicator() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-thinking';
+    wrapper.id = 'chat-thinking';
+    wrapper.innerHTML = `
+      <div class="thinking-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="thinking-label">AI is thinking...</div>
+    `;
+    chatMessages.appendChild(wrapper);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function hideThinkingIndicator() {
+    const el = document.getElementById('chat-thinking');
+    if (el) el.remove();
+  }
+
+  function showChangesCard(changes) {
+    const card = document.createElement('div');
+    card.className = 'chat-changes-card';
+
+    const count = Object.keys(changes).length;
+    let itemsHtml = '';
+    for (const [slotId, newValue] of Object.entries(changes)) {
+      const slot = contentMap[slotId];
+      if (!slot) continue;
+      const oldVal = (slot.value || '').slice(0, 30);
+      const newVal = (newValue || '').slice(0, 30);
+      const tag = (slot.tag || '').toUpperCase();
+      itemsHtml += `<div class="chat-change-item">${tag}: '${escapeHtml(oldVal)}' → '${escapeHtml(newVal)}'</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="chat-changes-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Applied ${count} change${count > 1 ? 's' : ''}
+      </div>
+      ${itemsHtml}
+      <div class="chat-changes-hint">Click Save to keep them</div>
+    `;
+
+    chatMessages.appendChild(card);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
@@ -1491,9 +1600,12 @@
     if (!message) return;
 
     chatInput.value = '';
-    addChatMessage(message, 'user');
+    chatInput.style.height = 'auto';
     btnSendChat.disabled = true;
-    btnSendChat.textContent = '...';
+    btnSendChat.classList.add('loading');
+
+    addChatMessage(message, 'user');
+    showThinkingIndicator();
 
     try {
       const res = await fetch(`${API}/chat`, {
@@ -1502,6 +1614,8 @@
         body: JSON.stringify({ message }),
       });
       const data = await res.json();
+
+      hideThinkingIndicator();
 
       if (res.ok) {
         addChatMessage(data.message, 'ai');
@@ -1525,21 +1639,17 @@
               }
             }
           }
-
-          const count = Object.keys(data.changes).length;
-          addChatMessage(
-            `Applied ${count} change${count > 1 ? 's' : ''}. Click Save to keep them.`,
-            'system'
-          );
+          showChangesCard(data.changes);
         }
       } else {
         addChatMessage(data.error?.message || 'Something went wrong', 'system');
       }
     } catch (err) {
+      hideThinkingIndicator();
       addChatMessage('Connection error: ' + err.message, 'system');
     } finally {
-      btnSendChat.disabled = false;
-      btnSendChat.textContent = 'Send';
+      btnSendChat.disabled = chatInput.value.trim().length === 0;
+      btnSendChat.classList.remove('loading');
     }
   }
 
