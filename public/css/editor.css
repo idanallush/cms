@@ -866,6 +866,59 @@ body {
   flex-shrink: 0;
 }
 
+.content-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.content-search-wrap .prop-input {
+  flex: 1;
+  padding-right: 70px;
+}
+
+.content-search-count {
+  position: absolute;
+  right: 28px;
+  color: var(--text-muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.content-search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: color 200ms, background-color 200ms;
+}
+
+.content-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-3);
+}
+
+.panel-empty-tip {
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.panel-empty-tip strong {
+  color: var(--accent);
+}
+
 .content-list {
   display: flex;
   flex-direction: column;
@@ -1039,6 +1092,39 @@ body {
   0% { opacity: 1; }
   70% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+.content-group-hidden {
+  color: #f59e0b;
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  margin-top: 8px;
+  padding-top: 12px;
+}
+
+.content-group-hidden .hidden-icon {
+  margin-right: 4px;
+}
+
+.content-hidden-note {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 0 0 8px;
+}
+
+.content-item-hidden {
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.content-item-hidden:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.content-item-hidden-badge {
+  color: #f59e0b;
+  font-size: 12px;
+  margin-left: auto;
+  title: "Hidden on page";
 }
 
 /* ── SEO Panel ── */

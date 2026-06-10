@@ -942,7 +942,28 @@
   // ── Content panel ──
   const contentListEl = document.getElementById('content-list');
   const contentSearch = document.getElementById('content-search');
+  const contentSearchCount = document.getElementById('content-search-count');
+  const contentSearchClear = document.getElementById('content-search-clear');
   let contentItemElements = []; // cache for search filtering
+
+  function isElementVisible(slotId) {
+    const doc = iframe.contentDocument;
+    if (!doc) return true; // assume visible if no iframe
+    const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return false;
+    const style = iframe.contentWindow.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    // Check if any ancestor is hidden
+    let parent = el.parentElement;
+    while (parent) {
+      const ps = iframe.contentWindow.getComputedStyle(parent);
+      if (ps.display === 'none' || ps.visibility === 'hidden') return false;
+      parent = parent.parentElement;
+    }
+    return true;
+  }
 
   function buildContentList() {
     contentListEl.innerHTML = '';
@@ -954,11 +975,39 @@
       return;
     }
 
-    // Try to group by page section using iframe DOM
-    const doc = iframe.contentDocument;
-    const sectionGroups = buildSectionGroups(doc, slotIds);
+    // Always group by element type (from API data, not iframe DOM)
+    const typeGroups = {
+      headings: { label: 'Headings', icon: 'H', items: [] },
+      paragraphs: { label: 'Text', icon: 'T', items: [] },
+      buttons: { label: 'Buttons', icon: 'B', items: [] },
+      links: { label: 'Links', icon: '🔗', items: [] },
+      images: { label: 'Images', icon: '🖼', items: [] },
+      other: { label: 'Other', icon: '…', items: [] },
+    };
+    const hiddenItems = [];
 
-    for (const group of sectionGroups) {
+    for (const slotId of slotIds) {
+      const slot = contentMap[slotId];
+      if (!slot) continue;
+      const tag = (slot.tag || '').toLowerCase();
+      const type = slot.type;
+      const visible = isElementVisible(slotId);
+      const entry = { slotId, slot, visible };
+
+      if (!visible) {
+        hiddenItems.push(entry);
+      }
+
+      if (/^h[1-6]$/.test(tag)) typeGroups.headings.items.push(entry);
+      else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') typeGroups.paragraphs.items.push(entry);
+      else if (tag === 'button' || tag === 'submit') typeGroups.buttons.items.push(entry);
+      else if (type === 'link') typeGroups.links.items.push(entry);
+      else if (type === 'image') typeGroups.images.items.push(entry);
+      else typeGroups.other.items.push(entry);
+    }
+
+    // Render type groups
+    for (const group of Object.values(typeGroups)) {
       if (group.items.length === 0) continue;
 
       const header = document.createElement('div');
@@ -966,96 +1015,35 @@
       header.textContent = `${group.label} (${group.items.length})`;
       contentListEl.appendChild(header);
 
-      for (const { slotId, slot } of group.items) {
-        const item = createContentItem(slotId, slot);
+      for (const entry of group.items) {
+        const item = createContentItem(entry.slotId, entry.slot, entry.visible);
         contentListEl.appendChild(item);
-        contentItemElements.push({ el: item, slotId, slot });
+        contentItemElements.push({ el: item, slotId: entry.slotId, slot: entry.slot });
+      }
+    }
+
+    // Hidden content section at bottom
+    if (hiddenItems.length > 0) {
+      const hiddenHeader = document.createElement('div');
+      hiddenHeader.className = 'content-group-header content-group-hidden';
+      hiddenHeader.innerHTML = `<span class="hidden-icon">&#9888;</span> Hidden / Collapsed (${hiddenItems.length})`;
+      contentListEl.appendChild(hiddenHeader);
+
+      const hiddenNote = document.createElement('div');
+      hiddenNote.className = 'content-hidden-note';
+      hiddenNote.textContent = 'Elements inside accordions, tabs, or collapsed sections. Edit them here — changes apply on save.';
+      contentListEl.appendChild(hiddenNote);
+
+      for (const entry of hiddenItems) {
+        const item = createContentItem(entry.slotId, entry.slot, false);
+        item.classList.add('content-item-hidden');
+        contentListEl.appendChild(item);
+        contentItemElements.push({ el: item, slotId: entry.slotId, slot: entry.slot });
       }
     }
   }
 
-  function buildSectionGroups(doc, slotIds) {
-    // If iframe DOM is available, group slots by their parent section
-    if (doc) {
-      const sectionTags = ['header', 'nav', 'main', 'section', 'article', 'aside', 'footer'];
-      const sectionEls = [];
-      sectionTags.forEach(tag => {
-        doc.querySelectorAll(tag).forEach(el => sectionEls.push(el));
-      });
-
-      if (sectionEls.length > 0) {
-        const groups = [];
-        const assigned = new Set();
-
-        for (const sectionEl of sectionEls) {
-          const heading = sectionEl.querySelector('h1, h2, h3');
-          const sectionName = heading
-            ? heading.textContent.trim().slice(0, 30)
-            : sectionEl.tagName.charAt(0) + sectionEl.tagName.slice(1).toLowerCase();
-          const tagLabel = sectionEl.tagName.toLowerCase();
-          const items = [];
-
-          for (const slotId of slotIds) {
-            if (assigned.has(slotId)) continue;
-            const slot = contentMap[slotId];
-            if (!slot) continue;
-
-            // Check if this slot's element lives inside this section
-            const slotEl = doc.querySelector(`[data-slot-id*="${slotId}"]`);
-            if (slotEl && sectionEl.contains(slotEl)) {
-              items.push({ slotId, slot });
-              assigned.add(slotId);
-            }
-          }
-
-          if (items.length > 0) {
-            groups.push({ label: `${sectionName} (${tagLabel})`, items });
-          }
-        }
-
-        // Slots not found in any section (hidden or outside sections) — still from API
-        const unmatched = [];
-        for (const slotId of slotIds) {
-          if (assigned.has(slotId)) continue;
-          const slot = contentMap[slotId];
-          if (slot) unmatched.push({ slotId, slot });
-        }
-        if (unmatched.length > 0) {
-          groups.push({ label: 'Other / Hidden', items: unmatched });
-        }
-
-        return groups;
-      }
-    }
-
-    // Fallback: group by element type
-    const typeGroups = {
-      headings: { label: 'Headings', items: [] },
-      paragraphs: { label: 'Paragraphs', items: [] },
-      buttons: { label: 'Buttons', items: [] },
-      links: { label: 'Links', items: [] },
-      images: { label: 'Images', items: [] },
-      other: { label: 'Other', items: [] },
-    };
-
-    for (const slotId of slotIds) {
-      const slot = contentMap[slotId];
-      if (!slot) continue;
-      const tag = (slot.tag || '').toLowerCase();
-      const type = slot.type;
-
-      if (/^h[1-6]$/.test(tag)) typeGroups.headings.items.push({ slotId, slot });
-      else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') typeGroups.paragraphs.items.push({ slotId, slot });
-      else if (tag === 'button' || tag === 'submit') typeGroups.buttons.items.push({ slotId, slot });
-      else if (type === 'link') typeGroups.links.items.push({ slotId, slot });
-      else if (type === 'image') typeGroups.images.items.push({ slotId, slot });
-      else typeGroups.other.items.push({ slotId, slot });
-    }
-
-    return Object.values(typeGroups);
-  }
-
-  function createContentItem(slotId, slot) {
+  function createContentItem(slotId, slot, visible) {
     const item = document.createElement('div');
     item.className = 'content-item';
     item.dataset.slotId = slotId;
@@ -1063,12 +1051,16 @@
     const tag = (slot.tag || '').toUpperCase();
     const typeLabel = slot.type === 'richtext' ? 'rich text' : slot.type;
     const currentValue = pendingChanges[slotId]?.newValue ?? slot.value;
+    const visibilityBadge = visible === false
+      ? '<span class="content-item-hidden-badge" title="Hidden on page">&#9673;</span>'
+      : '';
 
     if (slot.type === 'image') {
       item.innerHTML = `
         <div class="content-item-header">
           <span class="content-item-type">${tag || 'IMG'}</span>
           <span class="content-item-label">${typeLabel}</span>
+          ${visibilityBadge}
         </div>
         <div class="content-item-img-preview">
           <img src="${escapeHtml(currentValue)}" alt="">
@@ -1090,6 +1082,7 @@
         <div class="content-item-header">
           <span class="content-item-type">${tag || 'TXT'}</span>
           <span class="content-item-label">${typeLabel}</span>
+          ${visibilityBadge}
         </div>
         <div class="content-item-preview">${escapeHtml(previewText) || '(empty)'}</div>
         <div class="content-item-edit">
@@ -1302,16 +1295,20 @@
   }
 
   // Content search
-  contentSearch.addEventListener('input', () => {
+  function filterContentList() {
     const query = contentSearch.value.toLowerCase().trim();
     let currentHeader = null;
     let headerHasVisible = false;
+    let matchCount = 0;
 
     for (const child of Array.from(contentListEl.children)) {
-      if (child.classList.contains('content-group-header')) {
-        // Show/hide previous header based on whether it had visible items
+      if (child.classList.contains('content-group-header') || child.classList.contains('content-hidden-note')) {
         if (currentHeader) {
           currentHeader.style.display = headerHasVisible ? '' : 'none';
+        }
+        if (child.classList.contains('content-hidden-note')) {
+          child.style.display = query ? 'none' : '';
+          continue;
         }
         currentHeader = child;
         headerHasVisible = false;
@@ -1323,21 +1320,43 @@
       if (!query) {
         child.style.display = '';
         headerHasVisible = true;
+        matchCount++;
         continue;
       }
 
       const slot = contentMap[child.dataset.slotId];
       const text = (slot?.value || '').toLowerCase();
       const tag = (slot?.tag || '').toLowerCase();
-      const matches = text.includes(query) || tag.includes(query);
+      const typeLabel = (slot?.type || '').toLowerCase();
+      const matches = text.includes(query) || tag.includes(query) || typeLabel.includes(query);
       child.style.display = matches ? '' : 'none';
-      if (matches) headerHasVisible = true;
+      if (matches) {
+        headerHasVisible = true;
+        matchCount++;
+      }
     }
 
-    // Handle last header
     if (currentHeader) {
       currentHeader.style.display = headerHasVisible ? '' : 'none';
     }
+
+    // Update search count and clear button
+    if (query) {
+      contentSearchCount.textContent = `${matchCount} found`;
+      contentSearchCount.classList.remove('hidden');
+      contentSearchClear.classList.remove('hidden');
+    } else {
+      contentSearchCount.classList.add('hidden');
+      contentSearchClear.classList.add('hidden');
+    }
+  }
+
+  contentSearch.addEventListener('input', filterContentList);
+
+  contentSearchClear.addEventListener('click', () => {
+    contentSearch.value = '';
+    filterContentList();
+    contentSearch.focus();
   });
 
   // Sync: update content panel when page editing applies changes

@@ -285,26 +285,35 @@ function forceAllVisible($) {
 function forceExpandHiddenContent($) {
   const forceExpandCSS = `
 <style data-cms-expand="true">
-  /* Force accordion/collapse/FAQ content open */
-  details > summary ~ * { display: block !important; }
+  /* Force accordion/collapse/FAQ content open — exclude nav/menu elements */
+  details:not(nav details) > summary ~ * { display: block !important; }
 
-  [class*="collapse"]:not(.navbar-collapse):not([class*="carousel"]),
-  [class*="accordion-body"],
-  [class*="accordion-content"],
-  [class*="accordion-panel"],
+  [class*="collapse"]:not(.navbar-collapse):not([class*="carousel"]):not(nav *):not([class*="nav-"]):not([class*="menu-"]),
+  [class*="accordion-body"]:not(nav *),
+  [class*="accordion-content"]:not(nav *),
+  [class*="accordion-panel"]:not(nav *),
   [class*="faq-answer"],
   [class*="faq-content"],
   [class*="read-more-content"],
-  [class*="expandable"],
-  [class*="toggled-content"],
-  .collapse:not(.show):not(.navbar-collapse):not([class*="carousel"]),
-  .collapsing:not([class*="carousel"]) {
+  [class*="expandable"]:not(nav *):not([class*="nav-"]):not([class*="menu-"]),
+  [class*="toggled-content"]:not(nav *):not([class*="nav-"]):not([class*="menu-"]),
+  .collapse:not(.show):not(.navbar-collapse):not([class*="carousel"]):not(nav *),
+  .collapsing:not([class*="carousel"]):not(nav *) {
     display: block !important;
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
     opacity: 1 !important;
     visibility: visible !important;
+  }
+
+  /* Preserve navbar/menu toggle behavior */
+  nav [class*="collapse"],
+  [class*="navbar"] [class*="collapse"],
+  [class*="nav-menu"],
+  [class*="mobile-menu"],
+  [class*="hamburger-menu"] {
+    /* Don't override — let original CSS control these */
   }
 
   /* Ensure editable elements are always clickable */
