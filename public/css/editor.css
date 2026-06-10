@@ -1127,6 +1127,25 @@ body {
   title: "Hidden on page";
 }
 
+.content-item.highlight-flash {
+  animation: highlightFlash 2s ease;
+}
+
+@keyframes highlightFlash {
+  0%, 100% { border-color: #333; }
+  25%, 75% { border-color: #2563eb; box-shadow: 0 0 10px rgba(37, 99, 235, 0.3); }
+}
+
+.content-item-context {
+  font-size: 11px;
+  color: #a78bfa;
+  padding: 2px 8px 4px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── SEO Panel ── */
 .seo-preview {
   margin-bottom: 16px;

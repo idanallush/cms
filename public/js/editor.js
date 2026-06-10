@@ -497,8 +497,61 @@
       });
     });
 
-    // Capture-phase click handler — intercepts ONLY clicks on editable slots.
-    // Non-slot clicks (tab buttons, carousel arrows, accordion toggles) pass through.
+    function isTriggerElement(el) {
+      const text = (el.textContent || '').trim().toLowerCase();
+      const cls = (el.className || '').toLowerCase();
+      if (text.includes('קרא עוד') || text.includes('read more') ||
+          text.includes('show more') || text.includes('הצג עוד')) return true;
+      if (cls.includes('accordion') || cls.includes('faq') ||
+          cls.includes('toggle') || cls.includes('collapse')) return true;
+      if (el.closest('[class*="accordion"]') || el.closest('details > summary')) return true;
+      if (el.getAttribute('role') === 'tab' || cls.includes('tab-') ||
+          el.closest('[role="tablist"]')) return true;
+      if (el.getAttribute('aria-controls') || el.getAttribute('data-target') ||
+          el.getAttribute('data-toggle') || (el.getAttribute('href') || '').startsWith('#')) return true;
+      return false;
+    }
+
+    function findRelatedHiddenSlots(triggerEl) {
+      const hiddenSlots = [];
+      const targetId = triggerEl.getAttribute('aria-controls') ||
+                       (triggerEl.getAttribute('data-target') || '').replace('#', '') ||
+                       (triggerEl.getAttribute('href') || '').replace('#', '');
+      if (targetId) {
+        const targetEl = doc.getElementById(targetId);
+        if (targetEl) {
+          targetEl.querySelectorAll('[data-slot-id]').forEach(s => hiddenSlots.push(s.getAttribute('data-slot-id')));
+        }
+      }
+      if (hiddenSlots.length === 0) {
+        let sibling = triggerEl.nextElementSibling;
+        while (sibling && hiddenSlots.length === 0) {
+          sibling.querySelectorAll('[data-slot-id]').forEach(s => hiddenSlots.push(s.getAttribute('data-slot-id')));
+          if (sibling.getAttribute('data-slot-id')) hiddenSlots.push(sibling.getAttribute('data-slot-id'));
+          sibling = sibling.nextElementSibling;
+        }
+      }
+      if (hiddenSlots.length === 0) {
+        const parentSibling = triggerEl.parentElement?.nextElementSibling;
+        if (parentSibling) {
+          parentSibling.querySelectorAll('[data-slot-id]').forEach(s => hiddenSlots.push(s.getAttribute('data-slot-id')));
+        }
+      }
+      if (hiddenSlots.length === 0) {
+        const container = triggerEl.closest('section, article, div[class*="card"], div[class*="item"], div[class*="block"]');
+        if (container) {
+          container.querySelectorAll('[data-slot-id]').forEach(s => {
+            const st = doc.defaultView.getComputedStyle(s);
+            if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0' || s.offsetHeight === 0) {
+              hiddenSlots.push(s.getAttribute('data-slot-id'));
+            }
+          });
+        }
+      }
+      return hiddenSlots;
+    }
+
+    // Capture-phase click handler
     doc.addEventListener('click', (e) => {
       if (editorMode !== 'edit') return;
 
@@ -511,9 +564,20 @@
         const slotType = target.getAttribute('data-slot-type');
         const slotIds = target.getAttribute('data-slot-id').split(',');
         selectSlot(target, slotType, slotIds);
+      } else {
+        const clickedEl = e.target.closest('a, button, summary, [role="tab"], [class*="accordion"], [class*="toggle"], [class*="tab"]');
+        if (clickedEl && isTriggerElement(clickedEl)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          const hiddenSlotIds = findRelatedHiddenSlots(clickedEl);
+          window.parent.postMessage({
+            type: 'show-hidden-content',
+            slotIds: hiddenSlotIds,
+            triggerText: clickedEl.textContent.trim().slice(0, 60)
+          }, '*');
+        }
       }
-      // If NOT a slot element — do nothing, let the click pass through
-      // so tab buttons, carousel arrows, accordion toggles work normally
     }, true); // CAPTURE phase
 
     // Bubble-phase handler for click-outside-to-deselect
@@ -1043,6 +1107,35 @@
     }
   }
 
+  function getSlotContext(slotId) {
+    const doc = iframe.contentDocument;
+    if (!doc) return null;
+    const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
+    if (!el) return null;
+    const accordion = el.closest('[class*="accordion"], [class*="faq"], details');
+    if (accordion) {
+      const header = accordion.querySelector('h2, h3, h4, summary, [class*="header"], [class*="title"]');
+      const text = header?.textContent?.trim()?.substring(0, 40) || 'Accordion';
+      return '📋 ' + text;
+    }
+    const tabPanel = el.closest('[role="tabpanel"], [class*="tab-pane"]');
+    if (tabPanel) {
+      const panelId = tabPanel.id || tabPanel.getAttribute('aria-labelledby');
+      if (panelId) {
+        const tabEl = doc.querySelector(`[aria-controls="${panelId}"], [href="#${panelId}"]`);
+        if (tabEl) return '📑 Tab: ' + (tabEl.textContent?.trim()?.substring(0, 30) || 'Tab');
+      }
+      return '📑 Tab content';
+    }
+    const readMore = el.closest('[class*="read-more"], [class*="collapse"]:not(.navbar-collapse), [class*="expandable"]');
+    if (readMore) {
+      const heading = readMore.parentElement?.querySelector('h2, h3, h4');
+      const text = heading?.textContent?.trim()?.substring(0, 30) || 'Read More';
+      return '📖 Under "' + text + '"';
+    }
+    return null;
+  }
+
   function createContentItem(slotId, slot, visible) {
     const item = document.createElement('div');
     item.className = 'content-item';
@@ -1054,6 +1147,8 @@
     const visibilityBadge = visible === false
       ? '<span class="content-item-hidden-badge" title="Hidden on page">&#9673;</span>'
       : '';
+    const context = visible === false ? getSlotContext(slotId) : null;
+    const contextHtml = context ? `<div class="content-item-context">${escapeHtml(context)}</div>` : '';
 
     if (slot.type === 'image') {
       item.innerHTML = `
@@ -1062,6 +1157,7 @@
           <span class="content-item-label">${typeLabel}</span>
           ${visibilityBadge}
         </div>
+        ${contextHtml}
         <div class="content-item-img-preview">
           <img src="${escapeHtml(currentValue)}" alt="">
         </div>
@@ -1084,6 +1180,7 @@
           <span class="content-item-label">${typeLabel}</span>
           ${visibilityBadge}
         </div>
+        ${contextHtml}
         <div class="content-item-preview">${escapeHtml(previewText) || '(empty)'}</div>
         <div class="content-item-edit">
           <textarea class="content-item-textarea">${escapeHtml(currentValue)}</textarea>
@@ -1366,6 +1463,45 @@
       updateContentItemPreview(slotId, item);
     }
   }
+
+  function switchToTab(tabName) {
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+    const tab = document.querySelector(`.panel-tab[data-panel="${tabName}"]`);
+    if (tab) {
+      tab.classList.add('active');
+      document.getElementById(`panel-${tabName}`).classList.add('active');
+      if (tabName === 'content') buildContentList();
+    }
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.data?.type === 'show-hidden-content') {
+      const { slotIds, triggerText } = e.data;
+      switchToTab('content');
+
+      if (slotIds && slotIds.length > 0) {
+        setTimeout(() => {
+          const firstSlotItem = contentListEl.querySelector(`.content-item[data-slot-id="${slotIds[0]}"]`);
+          if (firstSlotItem) {
+            firstSlotItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstSlotItem.classList.add('highlight-flash');
+            setTimeout(() => firstSlotItem.classList.remove('highlight-flash'), 2000);
+            // Expand the item
+            const header = firstSlotItem.querySelector('.content-item-header');
+            if (header && !firstSlotItem.classList.contains('content-item-expanded')) {
+              header.click();
+            }
+            showToast(`Found ${slotIds.length} hidden item(s) — edit here`, 'info');
+          } else {
+            showToast(`No editable content found for "${triggerText}"`, 'info');
+          }
+        }, 300);
+      } else {
+        showToast(`No editable content found for "${triggerText}"`, 'info');
+      }
+    }
+  });
 
   // ── Sections panel ──
   function buildSectionsList() {
