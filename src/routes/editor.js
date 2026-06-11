@@ -31,10 +31,10 @@ router.get('/', asyncHandler(async (req, res) => {
     }
   }
 
-  // Check owner key in query
-  const ownerKey = req.query.key;
-  if (ownerKey && ownerKey === process.env.OWNER_PASSWORD) {
-    return res.sendFile(editorFile);
+  // Legacy ?key= parameter removed for security (password in URL leaks to logs/history).
+  // Owner auth uses cookie-based login only.
+  if (req.query.key) {
+    return res.redirect(`/login`);
   }
 
   // Fall back to cookie auth

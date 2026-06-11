@@ -771,8 +771,9 @@
         container.innerHTML = '<p class="modal-info">No versions yet. Save changes in the editor to create versions.</p>';
         return;
       }
-      container.innerHTML = '<ul class="modal-history-list">' + versions.map((v, i) => {
-        // versions can be strings (timestamp IDs) or objects with createdAt
+      const ul = document.createElement('ul');
+      ul.className = 'modal-history-list';
+      versions.forEach((v, i) => {
         const versionId = typeof v === 'string' ? v : (v.versionId || v._id || '');
         const dateStr = typeof v === 'string' ? v.replace(/-/g, (m, offset) => {
           if (offset === 4 || offset === 7) return '-';
@@ -786,23 +787,29 @@
           month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
         });
         const num = versions.length - i;
-        return `<li class="modal-history-item">
-          <div>
-            <span class="modal-history-version">v${num}</span>
-            <span class="modal-history-date">${formatted}</span>
-          </div>
-          <button class="btn-secondary btn-small" onclick="window.__restoreVersion('${siteId}','${versionId}')">Restore</button>
-        </li>`;
-      }).join('') + '</ul>';
+        const li = document.createElement('li');
+        li.className = 'modal-history-item';
+        const info = document.createElement('div');
+        info.innerHTML = `<span class="modal-history-version">v${num}</span><span class="modal-history-date">${escapeHtml(formatted)}</span>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary btn-small';
+        btn.textContent = 'Restore';
+        btn.addEventListener('click', () => restoreVersion(siteId, versionId));
+        li.appendChild(info);
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+      container.innerHTML = '';
+      container.appendChild(ul);
     } catch {
       container.innerHTML = '<p class="modal-info">Could not load history.</p>';
     }
   }
 
-  window.__restoreVersion = async function(siteId, versionId) {
+  async function restoreVersion(siteId, versionId) {
     if (!confirm('Restore this version? Current content will be saved as a new version first.')) return;
     try {
-      const res = await fetch(`${API}/${siteId}/rollback/${versionId}`, { method: 'POST' });
+      const res = await fetch(`${API}/${siteId}/rollback/${encodeURIComponent(versionId)}`, { method: 'POST' });
       if (res.ok) {
         showToast('Version restored', 'success');
         loadSiteHistory(siteId);
@@ -814,7 +821,7 @@
     } catch {
       showToast('Connection error', 'error');
     }
-  };
+  }
 
   // ══════════════════════════════════════
   // Site Actions (standalone)

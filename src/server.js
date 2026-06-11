@@ -21,12 +21,41 @@ const publicDir = path.join(__dirname, '..', 'public');
 const app = express();
 const PORT = process.env.PORT || 3500;
 
+app.set('trust proxy', 1);
+
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = process.env.CMS_URL
+  ? [process.env.CMS_URL]
+  : isProduction
+    ? []
+    : ['http://localhost:3500', 'http://127.0.0.1:3500'];
+
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'self'"],
+      frameAncestors: ["'self'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: false,
 }));
-app.use(cors({ credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(publicDir));

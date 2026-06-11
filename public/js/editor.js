@@ -105,6 +105,20 @@
   let pages = [];
   let currentPageId = null;
 
+  // ── HTML sanitizer (defense-in-depth for richtext innerHTML) ──
+  function sanitizeHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script,iframe,object,embed,form,link[rel="import"]').forEach(el => el.remove());
+    doc.querySelectorAll('*').forEach(el => {
+      for (const attr of [...el.attributes]) {
+        if (attr.name.startsWith('on') || (attr.name === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:'))) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+    return doc.body.innerHTML;
+  }
+
   // ── Toast ──
   function showToast(message, type) {
     const toast = document.createElement('div');
@@ -155,7 +169,7 @@
       const el = doc.querySelector(`[data-slot-id*="${last.slotId}"]`);
       if (el) {
         const slot = contentMap[last.slotId];
-        if (slot?.type === 'richtext') el.innerHTML = last.oldValue;
+        if (slot?.type === 'richtext') el.innerHTML = sanitizeHtml(last.oldValue);
         else if (slot?.type === 'text') el.textContent = last.oldValue;
         else if (slot?.type === 'image') el.src = last.oldValue;
         else if (slot?.type === 'link') el.href = last.oldValue;
@@ -916,7 +930,7 @@
       const newVal = propTextInput.value.trim();
       if (newVal !== oldVal) {
         if (slotType === 'richtext') {
-          el.innerHTML = newVal;
+          el.innerHTML = sanitizeHtml(newVal);
         } else {
           el.textContent = newVal;
         }
@@ -1356,7 +1370,7 @@
         if (doc) {
           const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
           if (el) {
-            if (slot.type === 'richtext') el.innerHTML = newVal;
+            if (slot.type === 'richtext') el.innerHTML = sanitizeHtml(newVal);
             else if (slot.type === 'text') el.textContent = newVal;
             else if (slot.type === 'link') el.href = newVal;
           }
@@ -2003,7 +2017,7 @@
                 const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
                 if (el) {
                   const slot = contentMap[slotId];
-                  if (slot.type === 'richtext') el.innerHTML = newValue;
+                  if (slot.type === 'richtext') el.innerHTML = sanitizeHtml(newValue);
                   else if (slot.type === 'text') el.textContent = newValue;
                   else if (slot.type === 'image') el.src = newValue;
                   else if (slot.type === 'link') el.href = newValue;

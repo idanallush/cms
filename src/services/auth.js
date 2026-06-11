@@ -2,8 +2,22 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 const SALT_ROUNDS = 12;
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret';
+
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required. The server cannot start without it.');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
+let ownerPasswordHash = null;
+
+async function getOwnerPasswordHash() {
+  if (!OWNER_PASSWORD) throw new Error('OWNER_PASSWORD not set in environment');
+  if (!ownerPasswordHash) {
+    ownerPasswordHash = await bcrypt.hash(OWNER_PASSWORD, SALT_ROUNDS);
+  }
+  return ownerPasswordHash;
+}
 
 export async function hashPassword(plain) {
   return bcrypt.hash(plain, SALT_ROUNDS);
@@ -13,9 +27,9 @@ export async function verifyPassword(plain, hash) {
   return bcrypt.compare(plain, hash);
 }
 
-export function verifyOwnerPassword(plain) {
-  if (!OWNER_PASSWORD) throw new Error('OWNER_PASSWORD not set in environment');
-  return plain === OWNER_PASSWORD;
+export async function verifyOwnerPassword(plain) {
+  const hash = await getOwnerPasswordHash();
+  return bcrypt.compare(plain, hash);
 }
 
 export function createToken(payload, expiresIn) {

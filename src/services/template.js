@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import DOMPurify from 'isomorphic-dompurify';
 
 const UNIT_PROPS = new Set([
   'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
@@ -59,7 +60,10 @@ export function renderTemplate(frozenTemplate, contentMap, styles) {
         } else if (slot.tag === 'input') {
           $el.attr('value', slot.value);
         } else {
-          $el.html(slot.value);
+          const safeValue = slot.type === 'richtext'
+            ? DOMPurify.sanitize(slot.value)
+            : slot.value;
+          $el.html(safeValue);
         }
       } else if (slot.type === 'image') {
         $el.attr('src', slot.value);

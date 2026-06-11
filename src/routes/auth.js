@@ -20,7 +20,7 @@ router.post('/login/owner', loginLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: { message: 'Password is required' } });
   }
 
-  if (!authService.verifyOwnerPassword(password)) {
+  if (!(await authService.verifyOwnerPassword(password))) {
     console.warn(`[${new Date().toISOString()}] Failed owner login from ${req.ip}`);
     return res.status(401).json({ error: { message: 'Invalid password' } });
   }
