@@ -1,7 +1,7 @@
 import * as store from '../storage/index.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const AI_TIMEOUT = 30000;
 
 async function getAiConfig() {
   const settings = await store.getAllSettings();
@@ -12,16 +12,23 @@ async function getAiConfig() {
 }
 
 export async function processChat(siteId, userMessage) {
-  const { provider, model, apiKey: OPENROUTER_API_KEY } = await getAiConfig();
+  let apiKey;
+  try {
+    const config = await getAiConfig();
+    apiKey = config.apiKey;
+    var { provider, model } = config;
+  } catch (err) {
+    console.error('[aiChat] Error loading config:', err.message);
+    throw new Error('AI editing temporarily unavailable. Could not load configuration.');
+  }
 
-  if (!OPENROUTER_API_KEY) {
+  if (!apiKey) {
     throw new Error('AI API key not configured. Add one in the Config panel.');
   }
 
   const content = await store.getContent(siteId);
   if (!content) throw new Error('Site has no content');
 
-  // Build a simplified slot map for the AI
   const slotSummary = {};
   for (const [slotId, slot] of Object.entries(content)) {
     slotSummary[slotId] = {
@@ -52,45 +59,74 @@ IMPORTANT: Always respond with valid JSON only. No markdown, no code blocks. Jus
 Current content slots:
 ${JSON.stringify(slotSummary, null, 2)}`;
 
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://client-cms.vercel.app',
-      'X-Title': 'Client CMS',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.3,
-      max_tokens: 2000,
-    }),
-  });
+  let res;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT);
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`AI API failed: ${err.error?.message || res.statusText}`);
+    res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://client-cms.vercel.app',
+        'X-Title': 'Client CMS',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      console.error('[aiChat] Request timed out after 30s');
+      throw new Error('AI request timed out. Try a simpler request or try again later.');
+    }
+    console.error('[aiChat] Network error:', err.message);
+    throw new Error('AI editing temporarily unavailable. Check your network connection.');
   }
 
-  const data = await res.json();
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      console.error('[aiChat] Invalid API key');
+      throw new Error('AI API key is invalid. Update it in the Config panel.');
+    }
+    if (res.status === 429) {
+      console.error('[aiChat] Rate limited');
+      throw new Error('AI rate limit reached. Wait a moment and try again.');
+    }
+    console.error(`[aiChat] API error ${res.status}:`, errBody);
+    throw new Error(`AI API failed: ${errBody.error?.message || res.statusText}`);
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    console.error('[aiChat] Invalid JSON response from API');
+    throw new Error('AI returned an invalid response. Try again.');
+  }
+
   const aiResponse = data.choices?.[0]?.message?.content;
 
   if (!aiResponse) {
     throw new Error('No response from AI');
   }
 
-  // Parse AI response
   let parsed;
   try {
-    // Strip potential markdown code blocks
     const cleaned = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     parsed = JSON.parse(cleaned);
   } catch {
-    // If AI didn't return valid JSON, treat as a text message
     return {
       changes: {},
       message: aiResponse,
@@ -101,7 +137,6 @@ ${JSON.stringify(slotSummary, null, 2)}`;
   const changes = parsed.changes || {};
   const message = parsed.message || 'Changes applied';
 
-  // Validate that referenced slots actually exist
   const validChanges = {};
   const invalidSlots = [];
 

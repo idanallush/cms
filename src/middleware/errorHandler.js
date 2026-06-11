@@ -1,13 +1,16 @@
 export function errorHandler(err, req, res, next) {
   const status = err.status || 500;
-  const message = err.message || 'Internal server error';
 
-  console.error(`[${new Date().toISOString()}] ${status} - ${message}`);
+  console.error(`[${new Date().toISOString()}] ${status} - ${err.message}`);
   if (process.env.NODE_ENV === 'development') {
     console.error(err.stack);
   }
 
+  const safeMessage = status >= 500
+    ? 'Internal server error'
+    : err.message || 'An error occurred';
+
   res.status(status).json({
-    error: { message, status }
+    error: { message: safeMessage, status }
   });
 }

@@ -57,7 +57,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(publicDir));
 
 const limiter = rateLimit({
@@ -72,7 +73,22 @@ app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-app.get('/health', (req, res) => {
+let storageInitialized = false;
+
+app.get('/health', async (req, res) => {
+  if (!storageInitialized) {
+    return res.status(503).json({ status: 'initializing', timestamp: new Date().toISOString() });
+  }
+  if (process.env.MONGODB_URI) {
+    try {
+      const mongo = await import('./storage/mongoStore.js');
+      if (!mongo.isConnected()) {
+        return res.status(503).json({ status: 'db_disconnected', timestamp: new Date().toISOString() });
+      }
+    } catch {
+      return res.status(503).json({ status: 'db_error', timestamp: new Date().toISOString() });
+    }
+  }
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -118,8 +134,14 @@ app.use(errorHandler);
 
 // Initialize storage (connects to MongoDB if MONGODB_URI is set)
 const storageReady = getStore()
-  .then(() => console.log('Storage initialized'))
-  .catch(err => console.error('Storage init error:', err.message));
+  .then(() => {
+    storageInitialized = true;
+    console.log('Storage initialized');
+  })
+  .catch(err => {
+    console.error('Storage init error:', err.message);
+    storageInitialized = true;
+  });
 
 // Only listen when running directly (not on Vercel)
 if (!process.env.VERCEL) {

@@ -425,41 +425,82 @@ function fixLazyLoadedImages($, pageUrl) {
   });
 }
 
+const MAX_HTML_SIZE = 10 * 1024 * 1024; // 10MB
+
 export async function ingestHtml(rawHtml, sourceUrl) {
-  return parseHtml(rawHtml, sourceUrl || 'pasted-html');
+  try {
+    if (typeof rawHtml === 'string' && rawHtml.length > MAX_HTML_SIZE) {
+      throw new Error(`HTML too large (${(rawHtml.length / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`);
+    }
+    return parseHtml(rawHtml, sourceUrl || 'pasted-html');
+  } catch (err) {
+    console.error('[ingest.ingestHtml] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function ingestUrl(url) {
-  const response = await axios.get(url, {
-    headers: { 'User-Agent': 'ClientCMS-Ingest/1.0' },
-    timeout: 15000,
-    maxRedirects: 5,
-  });
+  try {
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'ClientCMS-Ingest/1.0' },
+      timeout: 30000,
+      maxRedirects: 5,
+      maxContentLength: MAX_HTML_SIZE,
+    });
 
-  const html = response.data;
-  return parseHtml(html, url);
+    const html = response.data;
+    if (typeof html === 'string' && html.length > MAX_HTML_SIZE) {
+      throw new Error(`Page too large (${(html.length / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`);
+    }
+    return parseHtml(html, url);
+  } catch (err) {
+    if (err.code === 'ECONNABORTED') {
+      console.error('[ingest.ingestUrl] Timeout fetching URL:', url);
+      throw new Error('Page took too long to load (30s timeout). Try again or paste the HTML directly.');
+    }
+    if (err.response) {
+      console.error(`[ingest.ingestUrl] HTTP ${err.response.status} for URL:`, url);
+      throw new Error(`Failed to fetch page: HTTP ${err.response.status}`);
+    }
+    console.error('[ingest.ingestUrl] Error:', err.message);
+    throw err;
+  }
 }
 
 function parseHtml(html, pageUrl) {
-  const $ = cheerio.load(html, { decodeEntities: false });
+  let $;
+  try {
+    $ = cheerio.load(html, { decodeEntities: false });
+  } catch (err) {
+    console.error('[ingest.parseHtml] Cheerio parsing failed:', err.message);
+    throw new Error('Failed to parse HTML. The page may contain malformed markup.');
+  }
 
-  // Step 1: Convert all relative URLs to absolute
-  convertAllUrlsToAbsolute($, pageUrl);
+  try {
+    convertAllUrlsToAbsolute($, pageUrl);
+  } catch (err) {
+    console.error('[ingest.parseHtml] URL absolutization failed (continuing):', err.message);
+  }
 
-  // Step 2: Remove overlays, popups, cookie banners
-  removeOverlaysAndPopups($);
+  try { removeOverlaysAndPopups($); } catch (err) {
+    console.error('[ingest.parseHtml] removeOverlaysAndPopups failed (continuing):', err.message);
+  }
 
-  // Step 3: Force animation-related elements visible (targeted, not global)
-  forceAllVisible($);
+  try { forceAllVisible($); } catch (err) {
+    console.error('[ingest.parseHtml] forceAllVisible failed (continuing):', err.message);
+  }
 
-  // Step 3b: Force-expand hidden interactive content (accordions, tabs, sliders)
-  forceExpandHiddenContent($);
+  try { forceExpandHiddenContent($); } catch (err) {
+    console.error('[ingest.parseHtml] forceExpandHiddenContent failed (continuing):', err.message);
+  }
 
-  // Step 4: Remove animation and cookie scripts
-  removeAnimationScripts($);
+  try { removeAnimationScripts($); } catch (err) {
+    console.error('[ingest.parseHtml] removeAnimationScripts failed (continuing):', err.message);
+  }
 
-  // Step 5: Fix lazy-loaded images
-  fixLazyLoadedImages($, pageUrl);
+  try { fixLazyLoadedImages($, pageUrl); } catch (err) {
+    console.error('[ingest.parseHtml] fixLazyLoadedImages failed (continuing):', err.message);
+  }
 
   const contentMap = {};
   let slotCounter = 0;

@@ -128,6 +128,24 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
+  // ── API fetch wrapper ──
+  async function apiFetch(url, options = {}) {
+    try {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const message = errorData.error?.message || errorData.message || `Request failed (${res.status})`;
+        showToast(message, 'error');
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      showToast('Network error — check your connection', 'error');
+      console.error('[apiFetch]', url, err);
+      return null;
+    }
+  }
+
   // ── Pending changes tracking ──
   function addPendingChange(slotId, oldValue, newValue) {
     if (oldValue === newValue) {
@@ -224,8 +242,9 @@
 
   // ── Load site metadata ──
   async function loadMeta() {
-    const res = await fetch(API);
-    siteMeta = await res.json();
+    const data = await apiFetch(API);
+    if (!data) return;
+    siteMeta = data;
     siteName.textContent = siteMeta.name || 'Untitled Site';
     siteUrl.textContent = siteMeta.originalUrl;
     siteUrl.href = siteMeta.originalUrl;
@@ -261,17 +280,15 @@
   // ── Load content map ──
   async function loadContent() {
     const q = currentPageId ? `?pageId=${currentPageId}` : '';
-    const res = await fetch(`${API}/content${q}`);
-    contentMap = await res.json();
+    const data = await apiFetch(`${API}/content${q}`);
+    if (data) contentMap = data;
   }
 
   // ── Load styles ──
   async function loadStyles() {
-    try {
-      const q = currentPageId ? `?pageId=${currentPageId}` : '';
-      const res = await fetch(`${API}/styles${q}`);
-      stylesMap = await res.json();
-    } catch { stylesMap = {}; }
+    const q = currentPageId ? `?pageId=${currentPageId}` : '';
+    const data = await apiFetch(`${API}/styles${q}`);
+    stylesMap = data || {};
   }
 
   // ── Load iframe ──
@@ -1647,11 +1664,9 @@
 
   // ── SEO panel ──
   async function loadSeo() {
-    try {
-      const q = currentPageId ? `?pageId=${currentPageId}` : '';
-      const res = await fetch(`${API}/seo${q}`);
-      seoData = await res.json();
-    } catch { seoData = {}; }
+    const q = currentPageId ? `?pageId=${currentPageId}` : '';
+    const data = await apiFetch(`${API}/seo${q}`);
+    seoData = data || {};
 
     seoTitle.value = seoData.title || siteMeta.name || '';
     seoDescription.value = seoData.description || '';
@@ -2097,7 +2112,8 @@
           const versionId = btn.dataset.version;
           if (!confirm('Restore this version? Current unsaved changes will be lost.')) return;
           try {
-            await fetch(`${API}/rollback/${versionId}`, { method: 'POST' });
+            const result = await apiFetch(`${API}/rollback/${versionId}`, { method: 'POST' });
+            if (!result) return;
             pendingChanges = {};
             pendingStyleChanges = {};
             undoStack = [];

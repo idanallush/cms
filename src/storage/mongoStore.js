@@ -64,13 +64,22 @@ const Version = model('Version', versionSchema);
 
 let connected = false;
 
+export function isConnected() {
+  return connected && mongoose.connection.readyState === 1;
+}
+
 export async function connect() {
   if (connected) return;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI not set');
-  await mongoose.connect(uri);
-  connected = true;
-  console.log('MongoDB connected');
+  try {
+    await mongoose.connect(uri);
+    connected = true;
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('[mongoStore.connect] Error:', err.message);
+    throw err;
+  }
 }
 
 // ── Storage API (same interface as fileStore) ──
@@ -80,114 +89,25 @@ export async function ensureSiteDir(siteId) {
 }
 
 export async function saveMeta(siteId, meta) {
-  const existing = await Site.findOne({ siteId });
-  if (existing) {
-    Object.assign(existing, meta);
-    await existing.save();
-  } else {
-    await Site.create(meta);
+  try {
+    const existing = await Site.findOne({ siteId });
+    if (existing) {
+      Object.assign(existing, meta);
+      await existing.save();
+    } else {
+      await Site.create(meta);
+    }
+  } catch (err) {
+    console.error('[mongoStore.saveMeta] Error:', err.message);
+    throw err;
   }
 }
 
 export async function getMeta(siteId) {
-  const site = await Site.findOne({ siteId }).lean();
-  if (!site) return null;
-  return {
-    siteId: site.siteId,
-    name: site.name,
-    originalUrl: site.originalUrl,
-    createdAt: site.createdAt?.toISOString?.() || site.createdAt,
-    lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
-    slotCount: site.slotCount,
-    clientPasswordHash: site.clientPasswordHash,
-    clientDisplayName: site.clientDisplayName,
-    clientHasAccessed: site.clientHasAccessed,
-    requireApproval: site.requireApproval,
-    accessToken: site.accessToken,
-    customDomain: site.customDomain,
-    publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
-    publishUrl: site.publishUrl,
-    vercelProjectId: site.vercelProjectId,
-    vercelProjectName: site.vercelProjectName,
-    vercelDeploymentId: site.vercelDeploymentId,
-    seo: site.seo || {},
-    styles: site.styles || {},
-  };
-}
-
-export async function saveTemplate(siteId, html) {
-  await Site.updateOne({ siteId }, { frozenTemplate: html });
-}
-
-export async function getTemplate(siteId) {
-  const site = await Site.findOne({ siteId }, { frozenTemplate: 1 }).lean();
-  return site?.frozenTemplate || null;
-}
-
-export async function saveContent(siteId, contentMap) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-  await Version.create({ siteId, contentMap, createdAt: new Date() });
-  await Site.updateOne({ siteId }, { contentMap });
-
-  return timestamp;
-}
-
-export async function getContent(siteId) {
-  const site = await Site.findOne({ siteId }, { contentMap: 1 }).lean();
-  return site?.contentMap || null;
-}
-
-export async function listVersions(siteId) {
-  const versions = await Version.find({ siteId })
-    .sort({ createdAt: -1 })
-    .select({ createdAt: 1 })
-    .lean();
-
-  return versions.map(v => v.createdAt.toISOString().replace(/[:.]/g, '-'));
-}
-
-export async function getVersion(siteId, versionId) {
-  // Convert versionId back to approximate date for querying
-  const isoStr = versionId
-    .replace(/-/g, (m, offset) => {
-      if (offset === 4 || offset === 7) return '-';
-      if (offset === 10) return 'T';
-      if (offset === 13 || offset === 16) return ':';
-      if (offset === 19) return '.';
-      return m;
-    });
-
-  const targetDate = new Date(isoStr);
-  if (isNaN(targetDate.getTime())) return null;
-
-  // Find version within 1 second of the target timestamp
-  const version = await Version.findOne({
-    siteId,
-    createdAt: {
-      $gte: new Date(targetDate.getTime() - 1000),
-      $lte: new Date(targetDate.getTime() + 1000),
-    },
-  }).lean();
-
-  return version?.contentMap || null;
-}
-
-export async function siteExists(siteId) {
-  const count = await Site.countDocuments({ siteId });
-  return count > 0;
-}
-
-export async function listAllSites() {
-  const sites = await Site.find({}, {
-    frozenTemplate: 0,
-    contentMap: 0,
-  }).lean();
-
-  const result = [];
-  for (const site of sites) {
-    const versionCount = await Version.countDocuments({ siteId: site.siteId });
-    result.push({
+  try {
+    const site = await Site.findOne({ siteId }).lean();
+    if (!site) return null;
+    return {
       siteId: site.siteId,
       name: site.name,
       originalUrl: site.originalUrl,
@@ -207,89 +127,270 @@ export async function listAllSites() {
       vercelDeploymentId: site.vercelDeploymentId,
       seo: site.seo || {},
       styles: site.styles || {},
-      versionCount,
-    });
+    };
+  } catch (err) {
+    console.error('[mongoStore.getMeta] Error:', err.message);
+    return null;
   }
+}
 
-  return result;
+export async function saveTemplate(siteId, html) {
+  try {
+    await Site.updateOne({ siteId }, { frozenTemplate: html });
+  } catch (err) {
+    console.error('[mongoStore.saveTemplate] Error:', err.message);
+    throw err;
+  }
+}
+
+export async function getTemplate(siteId) {
+  try {
+    const site = await Site.findOne({ siteId }, { frozenTemplate: 1 }).lean();
+    return site?.frozenTemplate || null;
+  } catch (err) {
+    console.error('[mongoStore.getTemplate] Error:', err.message);
+    return null;
+  }
+}
+
+export async function saveContent(siteId, contentMap) {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await Version.create({ siteId, contentMap, createdAt: new Date() });
+    await Site.updateOne({ siteId }, { contentMap });
+    return timestamp;
+  } catch (err) {
+    console.error('[mongoStore.saveContent] Error:', err.message);
+    throw err;
+  }
+}
+
+export async function getContent(siteId) {
+  try {
+    const site = await Site.findOne({ siteId }, { contentMap: 1 }).lean();
+    return site?.contentMap || null;
+  } catch (err) {
+    console.error('[mongoStore.getContent] Error:', err.message);
+    return null;
+  }
+}
+
+export async function listVersions(siteId) {
+  try {
+    const versions = await Version.find({ siteId })
+      .sort({ createdAt: -1 })
+      .select({ createdAt: 1 })
+      .lean();
+    return versions.map(v => v.createdAt.toISOString().replace(/[:.]/g, '-'));
+  } catch (err) {
+    console.error('[mongoStore.listVersions] Error:', err.message);
+    return [];
+  }
+}
+
+export async function getVersion(siteId, versionId) {
+  try {
+    // Convert versionId back to approximate date for querying
+    const isoStr = versionId
+      .replace(/-/g, (m, offset) => {
+        if (offset === 4 || offset === 7) return '-';
+        if (offset === 10) return 'T';
+        if (offset === 13 || offset === 16) return ':';
+        if (offset === 19) return '.';
+        return m;
+      });
+
+    const targetDate = new Date(isoStr);
+    if (isNaN(targetDate.getTime())) return null;
+
+    // Find version within 1 second of the target timestamp
+    const version = await Version.findOne({
+      siteId,
+      createdAt: {
+        $gte: new Date(targetDate.getTime() - 1000),
+        $lte: new Date(targetDate.getTime() + 1000),
+      },
+    }).lean();
+
+    return version?.contentMap || null;
+  } catch (err) {
+    console.error('[mongoStore.getVersion] Error:', err.message);
+    return null;
+  }
+}
+
+export async function siteExists(siteId) {
+  try {
+    const count = await Site.countDocuments({ siteId });
+    return count > 0;
+  } catch (err) {
+    console.error('[mongoStore.siteExists] Error:', err.message);
+    return false;
+  }
+}
+
+export async function listAllSites() {
+  try {
+    const sites = await Site.find({}, {
+      frozenTemplate: 0,
+      contentMap: 0,
+    }).lean();
+
+    const result = [];
+    for (const site of sites) {
+      const versionCount = await Version.countDocuments({ siteId: site.siteId });
+      result.push({
+        siteId: site.siteId,
+        name: site.name,
+        originalUrl: site.originalUrl,
+        createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+        lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+        slotCount: site.slotCount,
+        clientPasswordHash: site.clientPasswordHash,
+        clientDisplayName: site.clientDisplayName,
+        clientHasAccessed: site.clientHasAccessed,
+        requireApproval: site.requireApproval,
+        accessToken: site.accessToken,
+        customDomain: site.customDomain,
+        publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+        publishUrl: site.publishUrl,
+        vercelProjectId: site.vercelProjectId,
+        vercelProjectName: site.vercelProjectName,
+        vercelDeploymentId: site.vercelDeploymentId,
+        seo: site.seo || {},
+        styles: site.styles || {},
+        versionCount,
+      });
+    }
+
+    return result;
+  } catch (err) {
+    console.error('[mongoStore.listAllSites] Error:', err.message);
+    return [];
+  }
 }
 
 export async function deleteSite(siteId) {
-  const result = await Site.deleteOne({ siteId });
-  await Version.deleteMany({ siteId });
-  return result.deletedCount > 0;
+  try {
+    const result = await Site.deleteOne({ siteId });
+    await Version.deleteMany({ siteId });
+    return result.deletedCount > 0;
+  } catch (err) {
+    console.error('[mongoStore.deleteSite] Error:', err.message);
+    return false;
+  }
 }
 
 export async function updateMeta(siteId, updates) {
-  const site = await Site.findOneAndUpdate(
-    { siteId },
-    { $set: updates },
-    { returnDocument: 'after', lean: true }
-  );
-  if (!site) return null;
-  return {
-    siteId: site.siteId,
-    name: site.name,
-    originalUrl: site.originalUrl,
-    createdAt: site.createdAt?.toISOString?.() || site.createdAt,
-    lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
-    slotCount: site.slotCount,
-    clientPasswordHash: site.clientPasswordHash,
-    clientDisplayName: site.clientDisplayName,
-    clientHasAccessed: site.clientHasAccessed,
-    requireApproval: site.requireApproval,
-    accessToken: site.accessToken,
-    customDomain: site.customDomain,
-    publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
-    publishUrl: site.publishUrl,
-    vercelProjectId: site.vercelProjectId,
-    vercelProjectName: site.vercelProjectName,
-    vercelDeploymentId: site.vercelDeploymentId,
-    seo: site.seo || {},
-    styles: site.styles || {},
-  };
+  try {
+    const site = await Site.findOneAndUpdate(
+      { siteId },
+      { $set: updates },
+      { returnDocument: 'after', lean: true }
+    );
+    if (!site) return null;
+    return {
+      siteId: site.siteId,
+      name: site.name,
+      originalUrl: site.originalUrl,
+      createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+      lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+      slotCount: site.slotCount,
+      clientPasswordHash: site.clientPasswordHash,
+      clientDisplayName: site.clientDisplayName,
+      clientHasAccessed: site.clientHasAccessed,
+      requireApproval: site.requireApproval,
+      accessToken: site.accessToken,
+      customDomain: site.customDomain,
+      publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+      publishUrl: site.publishUrl,
+      vercelProjectId: site.vercelProjectId,
+      vercelProjectName: site.vercelProjectName,
+      vercelDeploymentId: site.vercelDeploymentId,
+      seo: site.seo || {},
+      styles: site.styles || {},
+    };
+  } catch (err) {
+    console.error('[mongoStore.updateMeta] Error:', err.message);
+    return null;
+  }
 }
 
 export async function saveSeo(siteId, seo) {
-  await Site.updateOne({ siteId }, { $set: { seo } });
+  try {
+    await Site.updateOne({ siteId }, { $set: { seo } });
+  } catch (err) {
+    console.error('[mongoStore.saveSeo] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function getSeo(siteId) {
-  const site = await Site.findOne({ siteId }, { seo: 1 }).lean();
-  return site?.seo || {};
+  try {
+    const site = await Site.findOne({ siteId }, { seo: 1 }).lean();
+    return site?.seo || {};
+  } catch (err) {
+    console.error('[mongoStore.getSeo] Error:', err.message);
+    return {};
+  }
 }
 
 export async function saveStyles(siteId, styles) {
-  await Site.updateOne({ siteId }, { $set: { styles } });
+  try {
+    await Site.updateOne({ siteId }, { $set: { styles } });
+  } catch (err) {
+    console.error('[mongoStore.saveStyles] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function getStyles(siteId) {
-  const site = await Site.findOne({ siteId }, { styles: 1 }).lean();
-  return site?.styles || {};
+  try {
+    const site = await Site.findOne({ siteId }, { styles: 1 }).lean();
+    return site?.styles || {};
+  } catch (err) {
+    console.error('[mongoStore.getStyles] Error:', err.message);
+    return {};
+  }
 }
 
 // ── Settings API ──
 
 export async function getSetting(key) {
-  const doc = await Settings.findOne({ key }).lean();
-  return doc?.value || null;
+  try {
+    const doc = await Settings.findOne({ key }).lean();
+    return doc?.value || null;
+  } catch (err) {
+    console.error('[mongoStore.getSetting] Error:', err.message);
+    return null;
+  }
 }
 
 export async function setSetting(key, value) {
-  await Settings.findOneAndUpdate(
-    { key },
-    { key, value },
-    { upsert: true }
-  );
+  try {
+    await Settings.findOneAndUpdate(
+      { key },
+      { key, value },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error('[mongoStore.setSetting] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function getAllSettings() {
-  const docs = await Settings.find({}).lean();
-  const result = {};
-  for (const doc of docs) {
-    result[doc.key] = doc.value;
+  try {
+    const docs = await Settings.find({}).lean();
+    const result = {};
+    for (const doc of docs) {
+      result[doc.key] = doc.value;
+    }
+    return result;
+  } catch (err) {
+    console.error('[mongoStore.getAllSettings] Error:', err.message);
+    return {};
   }
-  return result;
 }
 
 // ── Multi-page support ──
@@ -298,128 +399,198 @@ async function migrateSiteToPages(site) {
   if (site.pages && site.pages.length > 0) return site;
   if (!site.frozenTemplate && !site.contentMap) return site;
 
-  const { v4: uuidv4 } = await import('uuid');
-  const indexPage = {
-    pageId: uuidv4(),
-    slug: 'index',
-    title: 'Home',
-    isIndex: true,
-    frozenTemplate: site.frozenTemplate || '',
-    contentMap: site.contentMap || {},
-    styles: site.styles || {},
-    seo: site.seo || {},
-    slotCount: site.slotCount || 0,
-  };
+  try {
+    const { v4: uuidv4 } = await import('uuid');
+    const indexPage = {
+      pageId: uuidv4(),
+      slug: 'index',
+      title: 'Home',
+      isIndex: true,
+      frozenTemplate: site.frozenTemplate || '',
+      contentMap: site.contentMap || {},
+      styles: site.styles || {},
+      seo: site.seo || {},
+      slotCount: site.slotCount || 0,
+    };
 
-  await Site.updateOne({ siteId: site.siteId }, {
-    $set: { pages: [indexPage] },
-  });
+    await Site.updateOne({ siteId: site.siteId }, {
+      $set: { pages: [indexPage] },
+    });
 
-  console.log(`[migration] Site ${site.siteId} migrated to pages format`);
-  site.pages = [indexPage];
-  return site;
+    console.log(`[migration] Site ${site.siteId} migrated to pages format`);
+    site.pages = [indexPage];
+    return site;
+  } catch (err) {
+    console.error('[mongoStore.migrateSiteToPages] Error:', err.message);
+    return site;
+  }
 }
 
 export async function getPages(siteId) {
-  let site = await Site.findOne({ siteId }).lean();
-  if (!site) return null;
-  site = await migrateSiteToPages(site);
-  return (site.pages || []).map(p => ({
-    pageId: p.pageId,
-    slug: p.slug,
-    title: p.title,
-    isIndex: p.isIndex,
-    slotCount: p.slotCount || Object.keys(p.contentMap || {}).length,
-  }));
+  try {
+    let site = await Site.findOne({ siteId }).lean();
+    if (!site) return null;
+    site = await migrateSiteToPages(site);
+    return (site.pages || []).map(p => ({
+      pageId: p.pageId,
+      slug: p.slug,
+      title: p.title,
+      isIndex: p.isIndex,
+      slotCount: p.slotCount || Object.keys(p.contentMap || {}).length,
+    }));
+  } catch (err) {
+    console.error('[mongoStore.getPages] Error:', err.message);
+    return null;
+  }
 }
 
 export async function getPage(siteId, pageId) {
-  let site = await Site.findOne({ siteId }).lean();
-  if (!site) return null;
-  site = await migrateSiteToPages(site);
-  return (site.pages || []).find(p => p.pageId === pageId) || null;
+  try {
+    let site = await Site.findOne({ siteId }).lean();
+    if (!site) return null;
+    site = await migrateSiteToPages(site);
+    return (site.pages || []).find(p => p.pageId === pageId) || null;
+  } catch (err) {
+    console.error('[mongoStore.getPage] Error:', err.message);
+    return null;
+  }
 }
 
 export async function getIndexPage(siteId) {
-  let site = await Site.findOne({ siteId }).lean();
-  if (!site) return null;
-  site = await migrateSiteToPages(site);
-  return (site.pages || []).find(p => p.isIndex) || (site.pages || [])[0] || null;
+  try {
+    let site = await Site.findOne({ siteId }).lean();
+    if (!site) return null;
+    site = await migrateSiteToPages(site);
+    return (site.pages || []).find(p => p.isIndex) || (site.pages || [])[0] || null;
+  } catch (err) {
+    console.error('[mongoStore.getIndexPage] Error:', err.message);
+    return null;
+  }
 }
 
 export async function addPage(siteId, page) {
-  let site = await Site.findOne({ siteId });
-  if (!site) return null;
-  const siteObj = site.toObject();
-  await migrateSiteToPages(siteObj);
-  await site.updateOne({ $push: { pages: page } });
-  return page;
+  try {
+    let site = await Site.findOne({ siteId });
+    if (!site) return null;
+    const siteObj = site.toObject();
+    await migrateSiteToPages(siteObj);
+    await site.updateOne({ $push: { pages: page } });
+    return page;
+  } catch (err) {
+    console.error('[mongoStore.addPage] Error:', err.message);
+    return null;
+  }
 }
 
 export async function updatePage(siteId, pageId, updates) {
-  const setFields = {};
-  for (const [key, value] of Object.entries(updates)) {
-    setFields[`pages.$.${key}`] = value;
+  try {
+    const setFields = {};
+    for (const [key, value] of Object.entries(updates)) {
+      setFields[`pages.$.${key}`] = value;
+    }
+    const result = await Site.updateOne(
+      { siteId, 'pages.pageId': pageId },
+      { $set: setFields }
+    );
+    return result.modifiedCount > 0;
+  } catch (err) {
+    console.error('[mongoStore.updatePage] Error:', err.message);
+    return false;
   }
-  const result = await Site.updateOne(
-    { siteId, 'pages.pageId': pageId },
-    { $set: setFields }
-  );
-  return result.modifiedCount > 0;
 }
 
 export async function deletePage(siteId, pageId) {
-  const site = await Site.findOne({ siteId }).lean();
-  if (!site) return false;
-  const page = (site.pages || []).find(p => p.pageId === pageId);
-  if (!page || page.isIndex) return false;
-  const result = await Site.updateOne(
-    { siteId },
-    { $pull: { pages: { pageId } } }
-  );
-  return result.modifiedCount > 0;
+  try {
+    const site = await Site.findOne({ siteId }).lean();
+    if (!site) return false;
+    const page = (site.pages || []).find(p => p.pageId === pageId);
+    if (!page || page.isIndex) return false;
+    const result = await Site.updateOne(
+      { siteId },
+      { $pull: { pages: { pageId } } }
+    );
+    return result.modifiedCount > 0;
+  } catch (err) {
+    console.error('[mongoStore.deletePage] Error:', err.message);
+    return false;
+  }
 }
 
 export async function getPageContent(siteId, pageId) {
-  const page = await getPage(siteId, pageId);
-  return page?.contentMap || null;
+  try {
+    const page = await getPage(siteId, pageId);
+    return page?.contentMap || null;
+  } catch (err) {
+    console.error('[mongoStore.getPageContent] Error:', err.message);
+    return null;
+  }
 }
 
 export async function savePageContent(siteId, pageId, contentMap) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  await Version.create({ siteId, contentMap, createdAt: new Date() });
-  await Site.updateOne(
-    { siteId, 'pages.pageId': pageId },
-    { $set: { 'pages.$.contentMap': contentMap } }
-  );
-  return timestamp;
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await Version.create({ siteId, contentMap, createdAt: new Date() });
+    await Site.updateOne(
+      { siteId, 'pages.pageId': pageId },
+      { $set: { 'pages.$.contentMap': contentMap } }
+    );
+    return timestamp;
+  } catch (err) {
+    console.error('[mongoStore.savePageContent] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function getPageTemplate(siteId, pageId) {
-  const page = await getPage(siteId, pageId);
-  return page?.frozenTemplate || null;
+  try {
+    const page = await getPage(siteId, pageId);
+    return page?.frozenTemplate || null;
+  } catch (err) {
+    console.error('[mongoStore.getPageTemplate] Error:', err.message);
+    return null;
+  }
 }
 
 export async function getPageStyles(siteId, pageId) {
-  const page = await getPage(siteId, pageId);
-  return page?.styles || {};
+  try {
+    const page = await getPage(siteId, pageId);
+    return page?.styles || {};
+  } catch (err) {
+    console.error('[mongoStore.getPageStyles] Error:', err.message);
+    return {};
+  }
 }
 
 export async function savePageStyles(siteId, pageId, styles) {
-  await Site.updateOne(
-    { siteId, 'pages.pageId': pageId },
-    { $set: { 'pages.$.styles': styles } }
-  );
+  try {
+    await Site.updateOne(
+      { siteId, 'pages.pageId': pageId },
+      { $set: { 'pages.$.styles': styles } }
+    );
+  } catch (err) {
+    console.error('[mongoStore.savePageStyles] Error:', err.message);
+    throw err;
+  }
 }
 
 export async function getPageSeo(siteId, pageId) {
-  const page = await getPage(siteId, pageId);
-  return page?.seo || {};
+  try {
+    const page = await getPage(siteId, pageId);
+    return page?.seo || {};
+  } catch (err) {
+    console.error('[mongoStore.getPageSeo] Error:', err.message);
+    return {};
+  }
 }
 
 export async function savePageSeo(siteId, pageId, seo) {
-  await Site.updateOne(
-    { siteId, 'pages.pageId': pageId },
-    { $set: { 'pages.$.seo': seo } }
-  );
+  try {
+    await Site.updateOne(
+      { siteId, 'pages.pageId': pageId },
+      { $set: { 'pages.$.seo': seo } }
+    );
+  } catch (err) {
+    console.error('[mongoStore.savePageSeo] Error:', err.message);
+    throw err;
+  }
 }

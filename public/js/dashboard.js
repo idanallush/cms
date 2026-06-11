@@ -41,6 +41,23 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
+  async function apiFetch(url, options = {}) {
+    try {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const message = errorData.error?.message || errorData.message || `Request failed (${res.status})`;
+        showToast(message, 'error');
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      showToast('Network error — check your connection', 'error');
+      console.error('[apiFetch]', url, err);
+      return null;
+    }
+  }
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
@@ -326,7 +343,9 @@
         dbBadge.className = 'badge badge-gray';
         dotDb.className = 'status-dot inactive';
       }
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] loadSettings error:', err.message);
+    }
   }
 
   // ══════════════════════════════════════
@@ -631,14 +650,19 @@
       btnSaveVercel.addEventListener('click', async () => {
         const name = modalBody.querySelector('#manage-vercel-project').value.trim();
         try {
-          await fetch(`${API}/${siteId}/settings`, {
+          const res = await fetch(`${API}/${siteId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ vercelProjectName: name }),
           });
-          showToast('Vercel project saved', 'success');
+          if (res.ok) {
+            showToast('Vercel project saved', 'success');
+          } else {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.error?.message || 'Save failed', 'error');
+          }
         } catch {
-          showToast('Failed', 'error');
+          showToast('Network error', 'error');
         }
       });
     }
@@ -829,12 +853,15 @@
 
   async function saveClientName(siteId, name) {
     try {
-      await fetch(`${API}/${siteId}/settings`, {
+      const res = await fetch(`${API}/${siteId}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientDisplayName: name }),
       });
-    } catch {}
+      if (!res.ok) console.error('[dashboard] saveClientName failed:', res.status);
+    } catch (err) {
+      console.error('[dashboard] saveClientName error:', err.message);
+    }
   }
 
   async function deleteSite(siteId, siteName) {

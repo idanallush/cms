@@ -3,6 +3,7 @@ import { renderTemplate } from './template.js';
 import * as store from '../storage/index.js';
 
 const VERCEL_API = 'https://api.vercel.com';
+const VERCEL_TIMEOUT = 60000;
 
 async function getVercelConfig() {
   const settings = await store.getAllSettings();
@@ -11,20 +12,69 @@ async function getVercelConfig() {
   return { token, teamId };
 }
 
+async function fetchWithTimeout(url, options, timeoutMs = VERCEL_TIMEOUT) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function vercelFetchWithRetry(url, options, retries = 1) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, options);
+
+      if (res.status === 401) {
+        throw new Error('Vercel token is invalid or expired. Update it in the Config panel.');
+      }
+      if (res.status === 403) {
+        throw new Error('Vercel token lacks permission for this project. Check your token scope.');
+      }
+      if (res.status === 429) {
+        throw new Error('Vercel rate limit reached. Wait a minute and try again.');
+      }
+
+      if (res.status >= 500 && attempt < retries) {
+        console.error(`[publish] Vercel returned ${res.status}, retrying (attempt ${attempt + 1})...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+
+      return res;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        if (attempt < retries) {
+          console.error('[publish] Vercel request timed out, retrying...');
+          continue;
+        }
+        throw new Error('Vercel API timed out after 60 seconds. Try again later.');
+      }
+      if (err.message.startsWith('Vercel')) throw err;
+      if (attempt < retries) {
+        console.error(`[publish] Network error, retrying: ${err.message}`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
   let html = renderTemplate(frozenTemplate, contentMap, styles);
 
-  // Use Cheerio to cleanly remove editor attributes
   const $ = cheerio.load(html, { decodeEntities: false });
   $('[data-slot-id]').removeAttr('data-slot-id');
   $('[data-slot-type]').removeAttr('data-slot-type');
 
-  // Remove CMS override styles (restore original animations for published site)
   $('style[data-cms-override="true"]').remove();
   $('style[data-cms-expand="true"]').remove();
   $('style[data-cms-editor="true"]').remove();
 
-  // Inject SEO meta tags
   const seoBlock = buildSeoBlock(meta);
   if (seoBlock) {
     if ($('head').length) {
@@ -91,21 +141,25 @@ export async function publishToVercel(siteId) {
 
   if (pages && pages.length > 0) {
     for (const pageSummary of pages) {
-      const page = await store.getPage(siteId, pageSummary.pageId);
-      if (!page || !page.frozenTemplate) continue;
+      try {
+        const page = await store.getPage(siteId, pageSummary.pageId);
+        if (!page || !page.frozenTemplate) continue;
 
-      const pageMeta = { ...meta, seo: page.seo || {} };
-      const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles);
+        const pageMeta = { ...meta, seo: page.seo || {} };
+        const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles);
 
-      const filePath = page.isIndex || page.slug === 'index'
-        ? 'index.html'
-        : `${page.slug}/index.html`;
+        const filePath = page.isIndex || page.slug === 'index'
+          ? 'index.html'
+          : `${page.slug}/index.html`;
 
-      files.push({
-        file: filePath,
-        data: Buffer.from(html).toString('base64'),
-        encoding: 'base64',
-      });
+        files.push({
+          file: filePath,
+          data: Buffer.from(html).toString('base64'),
+          encoding: 'base64',
+        });
+      } catch (err) {
+        console.error(`[publish] Error processing page ${pageSummary.pageId}:`, err.message);
+      }
     }
   }
 
@@ -140,19 +194,13 @@ export async function publishToVercel(siteId) {
   }
 
   console.log('[publish] siteId:', siteId);
-  console.log('[publish] meta.vercelProjectName:', meta.vercelProjectName);
-  console.log('[publish] meta.vercelProjectId:', meta.vercelProjectId);
   console.log('[publish] payload name:', deployPayload.name, 'project:', deployPayload.project);
-  console.log('[publish] teamId:', teamId);
 
   const deployUrl = teamId
     ? `${VERCEL_API}/v13/deployments?teamId=${teamId}`
     : `${VERCEL_API}/v13/deployments`;
 
-  console.log('[publish] deploy URL:', deployUrl);
-  console.log('[publish] deploy payload name:', deployPayload.name, 'project:', deployPayload.project);
-
-  const deployRes = await fetch(deployUrl, {
+  const deployRes = await vercelFetchWithRetry(deployUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${VERCEL_TOKEN}`,
@@ -163,6 +211,7 @@ export async function publishToVercel(siteId) {
 
   if (!deployRes.ok) {
     const err = await deployRes.json().catch(() => ({}));
+    console.error('[publish] Vercel deploy failed:', err);
     throw new Error(`Vercel deploy failed: ${err.error?.message || deployRes.statusText}`);
   }
 
@@ -184,13 +233,18 @@ export async function publishToVercel(siteId) {
 }
 
 export async function getPublishStatus(siteId) {
-  const meta = await store.getMeta(siteId);
-  if (!meta) return null;
+  try {
+    const meta = await store.getMeta(siteId);
+    if (!meta) return null;
 
-  return {
-    published: !!meta.publishedAt,
-    publishedAt: meta.publishedAt,
-    publishUrl: meta.publishUrl,
-    vercelProjectId: meta.vercelProjectId,
-  };
+    return {
+      published: !!meta.publishedAt,
+      publishedAt: meta.publishedAt,
+      publishUrl: meta.publishUrl,
+      vercelProjectId: meta.vercelProjectId,
+    };
+  } catch (err) {
+    console.error('[publish.getPublishStatus] Error:', err.message);
+    return null;
+  }
 }
