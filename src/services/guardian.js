@@ -1,4 +1,4 @@
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtml from 'sanitize-html';
 
 const URL_REGEX = /^https?:\/\/.+/i;
 const DANGEROUS_HREF = /^javascript:/i;
@@ -42,9 +42,9 @@ export function validateChanges(changes, currentContentMap) {
         errors.push(`Slot "${slotId}" (${slot.tag}) is a structural element and cannot be empty`);
         continue;
       }
-      const cleanValue = DOMPurify.sanitize(valueStr, {
-        ALLOWED_TAGS: ['b', 'i', 'u', 'em', 'strong', 'a', 'br', 'span', 'sub', 'sup', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
+      const cleanValue = sanitizeHtml(valueStr, {
+        allowedTags: ['b', 'i', 'u', 'em', 'strong', 'a', 'br', 'span', 'sub', 'sup', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'],
+        allowedAttributes: { '*': ['class', 'style'], 'a': ['href', 'target', 'rel'] },
       });
       sanitizedChanges[slotId] = { ...slot, value: cleanValue };
     } else if (slot.type === 'image') {

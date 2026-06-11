@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtml from 'sanitize-html';
 
 const UNIT_PROPS = new Set([
   'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
@@ -61,7 +61,17 @@ export function renderTemplate(frozenTemplate, contentMap, styles) {
           $el.attr('value', slot.value);
         } else {
           const safeValue = slot.type === 'richtext'
-            ? DOMPurify.sanitize(slot.value)
+            ? sanitizeHtml(slot.value, {
+                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'section', 'article', 'figure', 'figcaption', 'picture', 'source', 'video', 'br', 'hr']),
+                allowedAttributes: {
+                  '*': ['class', 'id', 'style', 'data-*'],
+                  'a': ['href', 'target', 'rel'],
+                  'img': ['src', 'alt', 'width', 'height', 'loading'],
+                  'source': ['src', 'srcset', 'type', 'media'],
+                  'video': ['src', 'poster', 'controls'],
+                },
+                allowedSchemes: ['http', 'https', 'mailto', 'tel', 'data'],
+              })
             : slot.value;
           $el.html(safeValue);
         }
