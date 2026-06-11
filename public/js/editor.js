@@ -498,17 +498,35 @@
     });
 
     function isTriggerElement(el) {
-      const text = (el.textContent || '').trim().toLowerCase();
+      const text = (el.textContent || '').trim();
+      const textLower = text.toLowerCase();
       const cls = (el.className || '').toLowerCase();
-      if (text.includes('קרא עוד') || text.includes('read more') ||
-          text.includes('show more') || text.includes('הצג עוד')) return true;
-      if (cls.includes('accordion') || cls.includes('faq') ||
-          cls.includes('toggle') || cls.includes('collapse')) return true;
-      if (el.closest('[class*="accordion"]') || el.closest('details > summary')) return true;
-      if (el.getAttribute('role') === 'tab' || cls.includes('tab-') ||
-          el.closest('[role="tablist"]')) return true;
+
+      // Hebrew triggers (exact or includes)
+      if (text === 'קרא עוד' || text === 'הצג עוד' || text === 'פרטים נוספים' ||
+          text === 'למידע נוסף' || text === 'הצג הכל') return true;
+
+      // English triggers
+      if (textLower === 'read more' || textLower === 'show more' ||
+          textLower === 'learn more' || textLower === 'see more' ||
+          textLower === 'view more' || textLower === 'expand') return true;
+
+      // Class-based detection
+      if (cls.includes('read-more') || cls.includes('readmore') ||
+          cls.includes('show-more') || cls.includes('expand') ||
+          cls.includes('toggle') || cls.includes('accordion') ||
+          cls.includes('faq') || cls.includes('collapse')) return true;
+
+      // Accordion/tab role
+      if (el.getAttribute('role') === 'tab') return true;
+      if (el.closest('details > summary')) return true;
+      if (el.closest('[class*="accordion-header"]') || el.closest('[class*="accordion-title"]')) return true;
+      if (el.closest('[role="tablist"]')) return true;
+
+      // Has aria-controls or data attributes pointing to content
       if (el.getAttribute('aria-controls') || el.getAttribute('data-target') ||
-          el.getAttribute('data-toggle') || (el.getAttribute('href') || '').startsWith('#')) return true;
+          el.getAttribute('data-toggle') || el.getAttribute('data-bs-toggle')) return true;
+
       return false;
     }
 
@@ -556,7 +574,26 @@
       if (editorMode !== 'edit') return;
 
       const target = e.target.closest('[data-slot-id]');
+
       if (target) {
+        // Check if this slot is ALSO a trigger for hidden content
+        if (isTriggerElement(target)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          const hiddenSlotIds = findRelatedHiddenSlots(target);
+          if (hiddenSlotIds.length > 0) {
+            window.parent.postMessage({
+              type: 'show-hidden-content',
+              slotIds: hiddenSlotIds,
+              triggerText: target.textContent.trim().slice(0, 60)
+            }, '*');
+            return; // Don't open normal editor
+          }
+          // No hidden content found — fall through to normal editing
+        }
+
+        // Normal slot editing
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -565,6 +602,7 @@
         const slotIds = target.getAttribute('data-slot-id').split(',');
         selectSlot(target, slotType, slotIds);
       } else {
+        // Not a slot — check if it's a trigger without data-slot-id
         const clickedEl = e.target.closest('a, button, summary, [role="tab"], [class*="accordion"], [class*="toggle"], [class*="tab"]');
         if (clickedEl && isTriggerElement(clickedEl)) {
           e.preventDefault();
