@@ -940,6 +940,46 @@ body {
   padding-top: 0;
 }
 
+.section-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.section-group-header:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+.section-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.section-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-count {
+  background: var(--bg-4);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
 .content-item {
   background: var(--bg-2);
   border: 1px solid var(--border);
@@ -1094,37 +1134,19 @@ body {
   100% { opacity: 0; }
 }
 
-.content-group-hidden {
-  color: #f59e0b;
-  border-top: 1px solid rgba(245, 158, 11, 0.2);
-  margin-top: 8px;
-  padding-top: 12px;
-}
-
-.content-group-hidden .hidden-icon {
-  margin-right: 4px;
-}
-
-.content-hidden-note {
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.4;
-  padding: 0 0 8px;
-}
-
 .content-item-hidden {
-  border-color: rgba(245, 158, 11, 0.2);
+  border-left: 3px solid #f59e0b;
 }
 
 .content-item-hidden:hover {
   border-color: rgba(245, 158, 11, 0.4);
+  border-left-color: #f59e0b;
 }
 
 .content-item-hidden-badge {
   color: #f59e0b;
   font-size: 12px;
   margin-left: auto;
-  title: "Hidden on page";
 }
 
 .content-item.highlight-flash {

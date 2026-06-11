@@ -1077,104 +1077,150 @@
       return;
     }
 
-    // Always group by element type (from API data, not iframe DOM)
-    const typeGroups = {
-      headings: { label: 'Headings', icon: 'H', items: [] },
-      paragraphs: { label: 'Text', icon: 'T', items: [] },
-      buttons: { label: 'Buttons', icon: 'B', items: [] },
-      links: { label: 'Links', icon: '🔗', items: [] },
-      images: { label: 'Images', icon: '🖼', items: [] },
-      other: { label: 'Other', icon: '…', items: [] },
-    };
-    const hiddenItems = [];
+    const doc = iframe.contentDocument;
+    const sections = buildSectionMap(doc, contentMap);
 
-    for (const slotId of slotIds) {
-      const slot = contentMap[slotId];
-      if (!slot) continue;
-      const tag = (slot.tag || '').toLowerCase();
-      const type = slot.type;
-      const visible = isElementVisible(slotId);
-      const entry = { slotId, slot, visible };
-
-      if (!visible) {
-        hiddenItems.push(entry);
-      }
-
-      if (/^h[1-6]$/.test(tag)) typeGroups.headings.items.push(entry);
-      else if (tag === 'p' || tag === 'div' || tag === 'span' || tag === 'li' || tag === 'td' || tag === 'th' || tag === 'label') typeGroups.paragraphs.items.push(entry);
-      else if (tag === 'button' || tag === 'submit') typeGroups.buttons.items.push(entry);
-      else if (type === 'link') typeGroups.links.items.push(entry);
-      else if (type === 'image') typeGroups.images.items.push(entry);
-      else typeGroups.other.items.push(entry);
+    if (sections.length === 0) {
+      contentListEl.innerHTML = '<p class="panel-empty">No editable content found</p>';
+      return;
     }
 
-    // Render type groups
-    for (const group of Object.values(typeGroups)) {
-      if (group.items.length === 0) continue;
-
+    sections.forEach(section => {
       const header = document.createElement('div');
-      header.className = 'content-group-header';
-      header.textContent = `${group.label} (${group.items.length})`;
+      header.className = 'content-group-header section-group-header';
+      header.innerHTML = `<span class="section-icon">${section.icon}</span><span class="section-name">${escapeHtml(section.name)}</span><span class="section-count">${section.slots.length}</span>`;
       contentListEl.appendChild(header);
 
-      for (const entry of group.items) {
-        const item = createContentItem(entry.slotId, entry.slot, entry.visible);
+      for (const entry of section.slots) {
+        const item = createContentItem(entry.slotId, entry.slot, entry.visible, entry.context);
+        if (!entry.visible) item.classList.add('content-item-hidden');
         contentListEl.appendChild(item);
         contentItemElements.push({ el: item, slotId: entry.slotId, slot: entry.slot });
       }
-    }
-
-    // Hidden content section at bottom
-    if (hiddenItems.length > 0) {
-      const hiddenHeader = document.createElement('div');
-      hiddenHeader.className = 'content-group-header content-group-hidden';
-      hiddenHeader.innerHTML = `<span class="hidden-icon">&#9888;</span> Hidden / Collapsed (${hiddenItems.length})`;
-      contentListEl.appendChild(hiddenHeader);
-
-      const hiddenNote = document.createElement('div');
-      hiddenNote.className = 'content-hidden-note';
-      hiddenNote.textContent = 'Elements inside accordions, tabs, or collapsed sections. Edit them here — changes apply on save.';
-      contentListEl.appendChild(hiddenNote);
-
-      for (const entry of hiddenItems) {
-        const item = createContentItem(entry.slotId, entry.slot, false);
-        item.classList.add('content-item-hidden');
-        contentListEl.appendChild(item);
-        contentItemElements.push({ el: item, slotId: entry.slotId, slot: entry.slot });
-      }
-    }
+    });
   }
 
-  function getSlotContext(slotId) {
-    const doc = iframe.contentDocument;
-    if (!doc) return null;
-    const el = doc.querySelector(`[data-slot-id*="${slotId}"]`);
-    if (!el) return null;
-    const accordion = el.closest('[class*="accordion"], [class*="faq"], details');
+  function buildSectionMap(doc, cMap) {
+    const sections = [];
+    const assignedSlots = new Set();
+
+    if (!doc || !doc.body) {
+      // No iframe — flat list from API data
+      const all = Object.entries(cMap).map(([slotId, slot]) => ({
+        slotId, slot, visible: false, context: null
+      }));
+      if (all.length > 0) sections.push({ name: 'All Content', icon: '📄', slots: all });
+      return sections;
+    }
+
+    // Find major section elements in the iframe
+    const sectionEls = [];
+    doc.querySelectorAll('header, nav, section, article, footer, main, [class*="section"], [class*="hero"], [class*="about"], [class*="service"], [class*="feature"], [class*="testimonial"], [class*="faq"], [class*="contact"], [class*="footer"], [class*="pricing"], [class*="team"], [class*="gallery"], [class*="review"]').forEach(el => {
+      // Skip deeply nested
+      let depth = 0, p = el.parentElement;
+      while (p && p !== doc.body) { depth++; p = p.parentElement; }
+      if (depth <= 6) sectionEls.push(el);
+    });
+
+    // Fallback: direct children of body that contain slots
+    if (sectionEls.length === 0) {
+      doc.body.querySelectorAll(':scope > *').forEach(el => {
+        if (el.querySelector('[data-slot-id]')) sectionEls.push(el);
+      });
+    }
+
+    sectionEls.forEach((sectionEl, idx) => {
+      const slots = [];
+      sectionEl.querySelectorAll('[data-slot-id]').forEach(slotEl => {
+        const slotId = slotEl.getAttribute('data-slot-id');
+        if (assignedSlots.has(slotId)) return;
+        assignedSlots.add(slotId);
+        const slot = cMap[slotId];
+        if (!slot) return;
+
+        const visible = isElementVisible(slotId);
+        const context = !visible ? getSlotContextFromEl(slotEl, doc) : null;
+        slots.push({ slotId, slot, visible, context });
+      });
+
+      if (slots.length === 0) return;
+      const { name, icon } = getSectionNameAndIcon(sectionEl, idx);
+      sections.push({ name, icon, slots });
+    });
+
+    // Orphan slots — in content map but not found in any DOM section
+    const orphanSlots = [];
+    Object.entries(cMap).forEach(([slotId, slot]) => {
+      if (!assignedSlots.has(slotId)) {
+        orphanSlots.push({
+          slotId, slot, visible: false,
+          context: '🔒 Hidden content'
+        });
+      }
+    });
+    if (orphanSlots.length > 0) {
+      sections.push({ name: 'Hidden / Other', icon: '🔒', slots: orphanSlots });
+    }
+
+    return sections;
+  }
+
+  function getSectionNameAndIcon(sectionEl, index) {
+    const cls = (sectionEl.className || '').toLowerCase();
+    const tag = sectionEl.tagName.toLowerCase();
+    const heading = sectionEl.querySelector('h1, h2, h3');
+    const headingText = heading ? heading.textContent.trim().substring(0, 40) : null;
+
+    if (tag === 'header' || tag === 'nav' || cls.includes('header') || cls.includes('nav'))
+      return { name: headingText || 'Navigation', icon: '🧭' };
+    if (cls.includes('hero') || cls.includes('banner') || cls.includes('jumbotron') || (index === 0 && tag === 'section'))
+      return { name: headingText || 'Hero', icon: '🏔️' };
+    if (cls.includes('about')) return { name: headingText || 'About', icon: '📖' };
+    if (cls.includes('service') || cls.includes('feature'))
+      return { name: headingText || 'Features', icon: '⭐' };
+    if (cls.includes('testimonial') || cls.includes('review'))
+      return { name: headingText || 'Reviews', icon: '💬' };
+    if (cls.includes('faq') || cls.includes('question'))
+      return { name: headingText || 'FAQ', icon: '❓' };
+    if (cls.includes('contact') || cls.includes('form'))
+      return { name: headingText || 'Contact', icon: '📧' };
+    if (cls.includes('pricing') || cls.includes('price'))
+      return { name: headingText || 'Pricing', icon: '💰' };
+    if (cls.includes('team') || cls.includes('staff'))
+      return { name: headingText || 'Team', icon: '👥' };
+    if (cls.includes('gallery') || cls.includes('portfolio'))
+      return { name: headingText || 'Gallery', icon: '🖼️' };
+    if (tag === 'footer' || cls.includes('footer'))
+      return { name: headingText || 'Footer', icon: '📋' };
+
+    if (headingText) return { name: headingText, icon: '📄' };
+    return { name: 'Section ' + (index + 1), icon: '📄' };
+  }
+
+  function getSlotContextFromEl(slotEl, iframeDoc) {
+    const accordion = slotEl.closest('[class*="accordion"], [class*="faq"], details');
     if (accordion) {
       const header = accordion.querySelector('h2, h3, h4, summary, [class*="header"], [class*="title"]');
-      const text = header?.textContent?.trim()?.substring(0, 40) || 'Accordion';
-      return '📋 ' + text;
+      return '📋 ' + (header?.textContent?.trim()?.substring(0, 40) || 'Accordion');
     }
-    const tabPanel = el.closest('[role="tabpanel"], [class*="tab-pane"]');
+    const tabPanel = slotEl.closest('[role="tabpanel"], [class*="tab-pane"]');
     if (tabPanel) {
       const panelId = tabPanel.id || tabPanel.getAttribute('aria-labelledby');
       if (panelId) {
-        const tabEl = doc.querySelector(`[aria-controls="${panelId}"], [href="#${panelId}"]`);
+        const tabEl = iframeDoc.querySelector('[aria-controls="' + panelId + '"], [href="#' + panelId + '"]');
         if (tabEl) return '📑 Tab: ' + (tabEl.textContent?.trim()?.substring(0, 30) || 'Tab');
       }
       return '📑 Tab content';
     }
-    const readMore = el.closest('[class*="read-more"], [class*="collapse"]:not(.navbar-collapse), [class*="expandable"]');
+    const readMore = slotEl.closest('[class*="read-more"], [class*="collapse"]:not(.navbar-collapse), [class*="expandable"]');
     if (readMore) {
       const heading = readMore.parentElement?.querySelector('h2, h3, h4');
-      const text = heading?.textContent?.trim()?.substring(0, 30) || 'Read More';
-      return '📖 Under "' + text + '"';
+      return '📖 Under "' + (heading?.textContent?.trim()?.substring(0, 30) || 'Read More') + '"';
     }
     return null;
   }
 
-  function createContentItem(slotId, slot, visible) {
+  function createContentItem(slotId, slot, visible, context) {
     const item = document.createElement('div');
     item.className = 'content-item';
     item.dataset.slotId = slotId;
@@ -1183,9 +1229,8 @@
     const typeLabel = slot.type === 'richtext' ? 'rich text' : slot.type;
     const currentValue = pendingChanges[slotId]?.newValue ?? slot.value;
     const visibilityBadge = visible === false
-      ? '<span class="content-item-hidden-badge" title="Hidden on page">&#9673;</span>'
+      ? '<span class="content-item-hidden-badge" title="Hidden on page">🔒</span>'
       : '';
-    const context = visible === false ? getSlotContext(slotId) : null;
     const contextHtml = context ? `<div class="content-item-context">${escapeHtml(context)}</div>` : '';
 
     if (slot.type === 'image') {
@@ -1437,13 +1482,9 @@
     let matchCount = 0;
 
     for (const child of Array.from(contentListEl.children)) {
-      if (child.classList.contains('content-group-header') || child.classList.contains('content-hidden-note')) {
+      if (child.classList.contains('content-group-header') || child.classList.contains('section-group-header')) {
         if (currentHeader) {
           currentHeader.style.display = headerHasVisible ? '' : 'none';
-        }
-        if (child.classList.contains('content-hidden-note')) {
-          child.style.display = query ? 'none' : '';
-          continue;
         }
         currentHeader = child;
         headerHasVisible = false;
@@ -1463,7 +1504,8 @@
       const text = (slot?.value || '').toLowerCase();
       const tag = (slot?.tag || '').toLowerCase();
       const typeLabel = (slot?.type || '').toLowerCase();
-      const matches = text.includes(query) || tag.includes(query) || typeLabel.includes(query);
+      const contextText = (child.querySelector('.content-item-context')?.textContent || '').toLowerCase();
+      const matches = text.includes(query) || tag.includes(query) || typeLabel.includes(query) || contextText.includes(query);
       child.style.display = matches ? '' : 'none';
       if (matches) {
         headerHasVisible = true;
