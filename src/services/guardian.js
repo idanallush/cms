@@ -43,8 +43,16 @@ export function validateChanges(changes, currentContentMap) {
         continue;
       }
       const cleanValue = sanitizeHtml(valueStr, {
-        allowedTags: ['b', 'i', 'u', 'em', 'strong', 'a', 'br', 'span', 'sub', 'sup', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'],
-        allowedAttributes: { '*': ['class', 'style'], 'a': ['href', 'target', 'rel'] },
+        allowedTags: ['b', 'i', 'u', 'em', 'strong', 'a', 'br', 'span', 'sub', 'sup', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'svg', 'path', 'circle', 'line', 'rect', 'polyline', 'polygon', 'ellipse', 'g'],
+        allowedAttributes: {
+          '*': ['class', 'style'],
+          'a': ['href', 'target', 'rel'],
+          'svg': ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'],
+          'path': ['d', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'],
+          'circle': ['cx', 'cy', 'r', 'fill', 'stroke'],
+          'line': ['x1', 'y1', 'x2', 'y2', 'stroke', 'stroke-width'],
+          'rect': ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill', 'stroke'],
+        },
       });
       sanitizedChanges[slotId] = { ...slot, value: cleanValue };
     } else if (slot.type === 'image') {

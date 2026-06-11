@@ -62,13 +62,23 @@ export function renderTemplate(frozenTemplate, contentMap, styles) {
         } else {
           const safeValue = slot.type === 'richtext'
             ? sanitizeHtml(slot.value, {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'section', 'article', 'figure', 'figcaption', 'picture', 'source', 'video', 'br', 'hr']),
+                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'section', 'article', 'figure', 'figcaption', 'picture', 'source', 'video', 'br', 'hr', 'svg', 'path', 'circle', 'line', 'rect', 'polyline', 'polygon', 'ellipse', 'g', 'defs', 'use', 'symbol']),
                 allowedAttributes: {
                   '*': ['class', 'id', 'style', 'data-*'],
                   'a': ['href', 'target', 'rel'],
                   'img': ['src', 'alt', 'width', 'height', 'loading'],
                   'source': ['src', 'srcset', 'type', 'media'],
                   'video': ['src', 'poster', 'controls'],
+                  'svg': ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'xmlns'],
+                  'path': ['d', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'],
+                  'circle': ['cx', 'cy', 'r', 'fill', 'stroke', 'stroke-width'],
+                  'line': ['x1', 'y1', 'x2', 'y2', 'stroke', 'stroke-width'],
+                  'rect': ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill', 'stroke'],
+                  'polyline': ['points', 'fill', 'stroke', 'stroke-width'],
+                  'polygon': ['points', 'fill', 'stroke'],
+                  'ellipse': ['cx', 'cy', 'rx', 'ry', 'fill', 'stroke'],
+                  'g': ['transform', 'fill', 'stroke'],
+                  'use': ['href', 'xlink:href', 'x', 'y', 'width', 'height'],
                 },
                 allowedSchemes: ['http', 'https', 'mailto', 'tel', 'data'],
               })

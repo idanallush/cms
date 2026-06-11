@@ -43,7 +43,7 @@ function hasOnlyInlineChildren($el) {
   const children = $el.children().toArray();
   return children.every(child => {
     const tag = child.tagName?.toLowerCase();
-    return tag && INLINE_TAGS.has(tag);
+    return tag && (INLINE_TAGS.has(tag) || tag === 'svg');
   });
 }
 
@@ -298,7 +298,15 @@ function forceExpandHiddenContent($) {
   [class*="expandable"]:not(nav *):not([class*="nav-"]):not([class*="menu-"]),
   [class*="toggled-content"]:not(nav *):not([class*="nav-"]):not([class*="menu-"]),
   .collapse:not(.show):not(.navbar-collapse):not([class*="carousel"]):not(nav *),
-  .collapsing:not([class*="carousel"]):not(nav *) {
+  .collapsing:not([class*="carousel"]):not(nav *),
+  [class*="tab-panel"]:not(nav *),
+  [class*="tab-pane"]:not(nav *),
+  [role="tabpanel"],
+  [class*="card-expand"],
+  [class*="card-detail"],
+  [class*="more-content"],
+  [class*="readmore-content"],
+  [class*="hidden-content"] {
     display: block !important;
     height: auto !important;
     max-height: none !important;
@@ -347,10 +355,30 @@ function forceExpandHiddenContent($) {
     if (text.includes('read more') || text.includes('קרא עוד') || text.includes('show more') || text.includes('הצג עוד')) {
       const parent = $(el).parent();
       parent.find('[style*="display: none"], [style*="display:none"]').css('display', 'block');
+      // Expand sibling elements (card-expand, more-content, etc.)
+      $(el).nextAll().each((_, sib) => {
+        const cls = $(sib).attr('class') || '';
+        if (cls.includes('expand') || cls.includes('more') || cls.includes('detail') || cls.includes('collapse') || cls.includes('hidden')) {
+          $(sib).css('display', 'block');
+          $(sib).css('max-height', 'none');
+          $(sib).css('overflow', 'visible');
+          $(sib).css('opacity', '1');
+          $(sib).css('visibility', 'visible');
+        }
+      });
       if ($(el).attr('aria-expanded') === 'false') {
         $(el).attr('aria-expanded', 'true');
       }
     }
+  });
+
+  // Force all tab panels visible (not just active)
+  $('[role="tabpanel"], [class*="tab-panel"], [class*="tab-pane"]').each((i, el) => {
+    const $el = $(el);
+    if ($el.closest('nav').length) return;
+    $el.css('display', 'block');
+    $el.css('opacity', '1');
+    $el.css('visibility', 'visible');
   });
 }
 
@@ -648,28 +676,35 @@ function parseHtml(html, pageUrl) {
     tagElement(el, $el, 'submit', 'text', value);
   });
 
-  // Process span and div that contain only text (no child block elements)
+  // Process span elements: text-only OR inline-only children
   $('span').each((i, el) => {
     const $el = $(el);
     if (isAlreadyTagged($el)) return;
-    if ($el.children().length > 0) return;
     const text = $el.text().trim();
     if (!text) return;
     if ($el.closest('[data-slot-id]').length > 0) return;
 
-    tagElement(el, $el, 'span', 'text', text);
+    if ($el.children().length === 0) {
+      tagElement(el, $el, 'span', 'text', text);
+    } else if (hasOnlyInlineChildren($el)) {
+      tagElement(el, $el, 'span', 'richtext', $el.html());
+    }
   });
 
+  // Process div elements: text-only, inline-only children, or mixed text+inline
   $('div').each((i, el) => {
     const $el = $(el);
     if (isAlreadyTagged($el)) return;
     if (hasChildBlockElements($el)) return;
-    if ($el.children().length > 0) return;
     const text = $el.text().trim();
     if (!text) return;
     if ($el.closest('[data-slot-id]').length > 0) return;
 
-    tagElement(el, $el, 'div', 'text', text);
+    if ($el.children().length === 0) {
+      tagElement(el, $el, 'div', 'text', text);
+    } else if (hasOnlyInlineChildren($el)) {
+      tagElement(el, $el, 'div', 'richtext', $el.html());
+    }
   });
 
   const frozenTemplate = $.html();

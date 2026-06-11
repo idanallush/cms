@@ -155,19 +155,19 @@
   function getSlotContextFromEl(slotEl, iframeDoc) {
     const accordion = slotEl.closest('[class*="accordion"], [class*="faq"], details');
     if (accordion) {
-      const header = accordion.querySelector('h2, h3, h4, summary, [class*="header"], [class*="title"]');
+      const header = accordion.querySelector('h2, h3, h4, summary, [class*="header"], [class*="title"], [class*="question"]');
       return '📋 ' + (header?.textContent?.trim()?.substring(0, 40) || 'Accordion');
     }
-    const tabPanel = slotEl.closest('[role="tabpanel"], [class*="tab-pane"]');
+    const tabPanel = slotEl.closest('[role="tabpanel"], [class*="tab-pane"], [class*="tab-panel"]');
     if (tabPanel) {
       const panelId = tabPanel.id || tabPanel.getAttribute('aria-labelledby');
       if (panelId) {
-        const tabEl = iframeDoc.querySelector('[aria-controls="' + panelId + '"], [href="#' + panelId + '"]');
+        const tabEl = iframeDoc.querySelector('[aria-controls="' + panelId + '"], [href="#' + panelId + '"], [data-tab="' + panelId + '"]');
         if (tabEl) return '📑 Tab: ' + (tabEl.textContent?.trim()?.substring(0, 30) || 'Tab');
       }
       return '📑 Tab content';
     }
-    const readMore = slotEl.closest('[class*="read-more"], [class*="collapse"]:not(.navbar-collapse), [class*="expandable"]');
+    const readMore = slotEl.closest('[class*="read-more"], [class*="card-expand"], [class*="collapse"]:not(.navbar-collapse), [class*="expandable"], [class*="more-content"]');
     if (readMore) {
       const heading = readMore.parentElement?.querySelector('h2, h3, h4');
       return '📖 Under "' + (heading?.textContent?.trim()?.substring(0, 30) || 'Read More') + '"';
