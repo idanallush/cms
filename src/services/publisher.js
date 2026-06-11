@@ -137,13 +137,13 @@ export async function publishToVercel(siteId) {
   if (!meta) throw new Error('Site not found');
 
   const pages = await store.getPages(siteId);
-  const files = [];
+  let files = [];
 
   if (pages && pages.length > 0) {
-    for (const pageSummary of pages) {
+    const pageResults = await Promise.all(pages.map(async (pageSummary) => {
       try {
         const page = await store.getPage(siteId, pageSummary.pageId);
-        if (!page || !page.frozenTemplate) continue;
+        if (!page || !page.frozenTemplate) return null;
 
         const pageMeta = { ...meta, seo: page.seo || {} };
         const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles);
@@ -152,15 +152,17 @@ export async function publishToVercel(siteId) {
           ? 'index.html'
           : `${page.slug}/index.html`;
 
-        files.push({
+        return {
           file: filePath,
           data: Buffer.from(html).toString('base64'),
           encoding: 'base64',
-        });
+        };
       } catch (err) {
         console.error(`[publish] Error processing page ${pageSummary.pageId}:`, err.message);
+        return null;
       }
-    }
+    }));
+    files = pageResults.filter(Boolean);
   }
 
   if (files.length === 0) {

@@ -101,6 +101,7 @@
   let saving = false;
   let publishing = false;
   let siteMeta = {};
+  let contentPanelBuilt = false;
   let previewBackBtn = null;
   let pages = [];
   let currentPageId = null;
@@ -213,7 +214,12 @@
       const panelId = `panel-${tab.dataset.panel}`;
       document.getElementById(panelId).classList.add('active');
 
-      if (tab.dataset.panel === 'content') buildContentList();
+      if (tab.dataset.panel === 'content') {
+        if (!contentPanelBuilt) {
+          buildContentList();
+          contentPanelBuilt = true;
+        }
+      }
       if (tab.dataset.panel === 'sections') buildSectionsList();
       if (tab.dataset.panel === 'seo') loadSeo();
     });
@@ -309,6 +315,7 @@
     pendingChanges = {};
     pendingStyleChanges = {};
     undoStack = [];
+    contentPanelBuilt = false;
     updateChangesUI();
     deselectSlot();
     await Promise.all([loadContent(), loadStyles()]);
@@ -1559,7 +1566,11 @@
     }
   }
 
-  contentSearch.addEventListener('input', filterContentList);
+  let contentSearchTimeout;
+  contentSearch.addEventListener('input', () => {
+    clearTimeout(contentSearchTimeout);
+    contentSearchTimeout = setTimeout(() => filterContentList(), 300);
+  });
 
   contentSearchClear.addEventListener('click', () => {
     contentSearch.value = '';
@@ -1582,7 +1593,10 @@
     if (tab) {
       tab.classList.add('active');
       document.getElementById(`panel-${tabName}`).classList.add('active');
-      if (tabName === 'content') buildContentList();
+      if (tabName === 'content' && !contentPanelBuilt) {
+        buildContentList();
+        contentPanelBuilt = true;
+      }
     }
   }
 

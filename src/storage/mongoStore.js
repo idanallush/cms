@@ -18,7 +18,7 @@ const pageSchema = new Schema({
 
 const siteSchema = new Schema({
   siteId: { type: String, required: true, unique: true, index: true },
-  name: { type: String, required: true },
+  name: { type: String, required: true, index: true },
   originalUrl: { type: String, required: true },
   // Legacy fields kept for migration
   frozenTemplate: { type: String, default: '' },
@@ -60,23 +60,40 @@ versionSchema.index({ siteId: 1, createdAt: -1 });
 const Site = model('Site', siteSchema);
 const Version = model('Version', versionSchema);
 
-// ── Connection ──
+// ── Connection (serverless-optimized with global cache) ──
 
-let connected = false;
+let cached = global.__mongooseCache;
+if (!cached) {
+  cached = global.__mongooseCache = { conn: null, promise: null };
+}
 
 export function isConnected() {
-  return connected && mongoose.connection.readyState === 1;
+  return !!cached.conn && mongoose.connection.readyState === 1;
 }
 
 export async function connect() {
-  if (connected) return;
+  if (cached.conn) return cached.conn;
+
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI not set');
+
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(uri, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+      bufferCommands: false,
+    }).then(conn => {
+      console.log('MongoDB connected');
+      return conn;
+    });
+  }
+
   try {
-    await mongoose.connect(uri);
-    connected = true;
-    console.log('MongoDB connected');
+    cached.conn = await cached.promise;
+    return cached.conn;
   } catch (err) {
+    cached.promise = null;
     console.error('[mongoStore.connect] Error:', err.message);
     throw err;
   }
@@ -234,36 +251,45 @@ export async function listAllSites() {
     const sites = await Site.find({}, {
       frozenTemplate: 0,
       contentMap: 0,
+      'pages.frozenTemplate': 0,
+      'pages.contentMap': 0,
+      'pages.styles': 0,
+      'pages.seo': 0,
     }).lean();
 
-    const result = [];
-    for (const site of sites) {
-      const versionCount = await Version.countDocuments({ siteId: site.siteId });
-      result.push({
-        siteId: site.siteId,
-        name: site.name,
-        originalUrl: site.originalUrl,
-        createdAt: site.createdAt?.toISOString?.() || site.createdAt,
-        lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
-        slotCount: site.slotCount,
-        clientPasswordHash: site.clientPasswordHash,
-        clientDisplayName: site.clientDisplayName,
-        clientHasAccessed: site.clientHasAccessed,
-        requireApproval: site.requireApproval,
-        accessToken: site.accessToken,
-        customDomain: site.customDomain,
-        publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
-        publishUrl: site.publishUrl,
-        vercelProjectId: site.vercelProjectId,
-        vercelProjectName: site.vercelProjectName,
-        vercelDeploymentId: site.vercelDeploymentId,
-        seo: site.seo || {},
-        styles: site.styles || {},
-        versionCount,
-      });
+    // Batch version counts instead of N+1 queries
+    const siteIds = sites.map(s => s.siteId);
+    const versionCounts = await Version.aggregate([
+      { $match: { siteId: { $in: siteIds } } },
+      { $group: { _id: '$siteId', count: { $sum: 1 } } },
+    ]);
+    const countMap = {};
+    for (const vc of versionCounts) {
+      countMap[vc._id] = vc.count;
     }
 
-    return result;
+    return sites.map(site => ({
+      siteId: site.siteId,
+      name: site.name,
+      originalUrl: site.originalUrl,
+      createdAt: site.createdAt?.toISOString?.() || site.createdAt,
+      lastEditedAt: site.lastEditedAt?.toISOString?.() || site.lastEditedAt,
+      slotCount: site.slotCount,
+      clientPasswordHash: site.clientPasswordHash,
+      clientDisplayName: site.clientDisplayName,
+      clientHasAccessed: site.clientHasAccessed,
+      requireApproval: site.requireApproval,
+      accessToken: site.accessToken,
+      customDomain: site.customDomain,
+      publishedAt: site.publishedAt?.toISOString?.() || site.publishedAt,
+      publishUrl: site.publishUrl,
+      vercelProjectId: site.vercelProjectId,
+      vercelProjectName: site.vercelProjectName,
+      vercelDeploymentId: site.vercelDeploymentId,
+      seo: site.seo || {},
+      styles: site.styles || {},
+      versionCount: countMap[site.siteId] || 0,
+    }));
   } catch (err) {
     console.error('[mongoStore.listAllSites] Error:', err.message);
     return [];
@@ -428,7 +454,19 @@ async function migrateSiteToPages(site) {
 
 export async function getPages(siteId) {
   try {
-    let site = await Site.findOne({ siteId }).lean();
+    let site = await Site.findOne({ siteId }, {
+      'pages.pageId': 1,
+      'pages.slug': 1,
+      'pages.title': 1,
+      'pages.isIndex': 1,
+      'pages.slotCount': 1,
+      frozenTemplate: 1,
+      contentMap: 1,
+      slotCount: 1,
+      siteId: 1,
+      styles: 1,
+      seo: 1,
+    }).lean();
     if (!site) return null;
     site = await migrateSiteToPages(site);
     return (site.pages || []).map(p => ({
@@ -436,7 +474,7 @@ export async function getPages(siteId) {
       slug: p.slug,
       title: p.title,
       isIndex: p.isIndex,
-      slotCount: p.slotCount || Object.keys(p.contentMap || {}).length,
+      slotCount: p.slotCount || 0,
     }));
   } catch (err) {
     console.error('[mongoStore.getPages] Error:', err.message);
