@@ -16,7 +16,7 @@ export async function processChat(siteId, userMessage) {
   try {
     const config = await getAiConfig();
     apiKey = config.apiKey;
-    var { provider, model } = config;
+    var { model } = config;
   } catch (err) {
     console.error('[aiChat] Error loading config:', err.message);
     throw new Error('AI editing temporarily unavailable. Could not load configuration.');

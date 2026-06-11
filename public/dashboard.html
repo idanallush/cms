@@ -107,14 +107,6 @@
 
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- Keep hidden config elements for JS compatibility -->
-  <div id="config-section" class="hidden">
-    <div id="config-toggle"></div>
-    <div id="config-body" class="hidden"></div>
-    <button id="btn-toggle-config" class="hidden"></button>
-    <span id="vercel-badge-old" class="hidden"></span>
-  </div>
-
   <!-- Modal overlay -->
   <div id="modal-overlay" class="modal-overlay">
     <div id="modal-box" class="modal-box">
@@ -129,6 +121,10 @@
     </div>
   </div>
 
-  <script src="/js/dashboard.js"></script>
+  <script src="/js/cms-utils.js"></script>
+  <script src="/js/dashboard-core.js"></script>
+  <script src="/js/dashboard-config.js"></script>
+  <script src="/js/dashboard-sites.js"></script>
+  <script src="/js/dashboard-ingest.js"></script>
 </body>
 </html>

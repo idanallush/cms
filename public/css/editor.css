@@ -182,23 +182,6 @@ body {
   transform: scale(0.97);
 }
 
-.mode-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.mode-label-edit {
-  color: var(--accent);
-}
-
-.mode-label-preview {
-  color: #f59e0b;
-}
-
 /* Preview mode: floating "Back to Edit" button — inside preview area only */
 .preview-back-btn {
   position: absolute;

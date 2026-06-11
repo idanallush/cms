@@ -101,10 +101,6 @@ export async function connect() {
 
 // ── Storage API (same interface as fileStore) ──
 
-export async function ensureSiteDir(siteId) {
-  // No-op for MongoDB
-}
-
 export async function saveMeta(siteId, meta) {
   try {
     const existing = await Site.findOne({ siteId });
@@ -520,23 +516,6 @@ export async function addPage(siteId, page) {
   }
 }
 
-export async function updatePage(siteId, pageId, updates) {
-  try {
-    const setFields = {};
-    for (const [key, value] of Object.entries(updates)) {
-      setFields[`pages.$.${key}`] = value;
-    }
-    const result = await Site.updateOne(
-      { siteId, 'pages.pageId': pageId },
-      { $set: setFields }
-    );
-    return result.modifiedCount > 0;
-  } catch (err) {
-    console.error('[mongoStore.updatePage] Error:', err.message);
-    return false;
-  }
-}
-
 export async function deletePage(siteId, pageId) {
   try {
     const site = await Site.findOne({ siteId }).lean();
@@ -576,16 +555,6 @@ export async function savePageContent(siteId, pageId, contentMap) {
   } catch (err) {
     console.error('[mongoStore.savePageContent] Error:', err.message);
     throw err;
-  }
-}
-
-export async function getPageTemplate(siteId, pageId) {
-  try {
-    const page = await getPage(siteId, pageId);
-    return page?.frozenTemplate || null;
-  } catch (err) {
-    console.error('[mongoStore.getPageTemplate] Error:', err.message);
-    return null;
   }
 }
 

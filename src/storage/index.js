@@ -19,14 +19,14 @@ export async function getStore() {
 // Proxy all store methods so callers can import once
 // Lazy-initialized on first call
 const methods = [
-  'ensureSiteDir', 'saveMeta', 'getMeta', 'saveTemplate', 'getTemplate',
+  'saveMeta', 'getMeta', 'saveTemplate', 'getTemplate',
   'saveContent', 'getContent', 'listVersions', 'getVersion',
   'siteExists', 'listAllSites', 'deleteSite', 'updateMeta',
   'getSetting', 'setSetting', 'getAllSettings',
   'saveSeo', 'getSeo', 'saveStyles', 'getStyles',
   // Multi-page methods
-  'getPages', 'getPage', 'getIndexPage', 'addPage', 'updatePage', 'deletePage',
-  'getPageContent', 'savePageContent', 'getPageTemplate',
+  'getPages', 'getPage', 'getIndexPage', 'addPage', 'deletePage',
+  'getPageContent', 'savePageContent',
   'getPageStyles', 'savePageStyles', 'getPageSeo', 'savePageSeo',
 ];
 
@@ -40,12 +40,12 @@ for (const method of methods) {
 }
 
 export const {
-  ensureSiteDir, saveMeta, getMeta, saveTemplate, getTemplate,
+  saveMeta, getMeta, saveTemplate, getTemplate,
   saveContent, getContent, listVersions, getVersion,
   siteExists, listAllSites, deleteSite, updateMeta,
   getSetting, setSetting, getAllSettings,
   saveSeo, getSeo, saveStyles, getStyles,
-  getPages, getPage, getIndexPage, addPage, updatePage, deletePage,
-  getPageContent, savePageContent, getPageTemplate,
+  getPages, getPage, getIndexPage, addPage, deletePage,
+  getPageContent, savePageContent,
   getPageStyles, savePageStyles, getPageSeo, savePageSeo,
 } = proxyStore;

@@ -255,45 +255,7 @@ export async function preview(req, res) {
   }
 }
 
-export async function render(req, res) {
-  try {
-    const { siteId } = req.params;
-    const pageId = req.query.pageId;
-    if (!(await store.siteExists(siteId))) {
-      return res.status(404).json({ error: { message: 'Site not found' } });
-    }
-
-    let template, content, styles;
-    if (pageId) {
-      const page = await store.getPage(siteId, pageId);
-      if (!page) return res.status(404).json({ error: { message: 'Page not found' } });
-      template = page.frozenTemplate;
-      content = page.contentMap;
-      styles = page.styles;
-    } else {
-      const indexPage = await store.getIndexPage(siteId);
-      if (indexPage) {
-        template = indexPage.frozenTemplate;
-        content = indexPage.contentMap;
-        styles = indexPage.styles;
-      } else {
-        template = await store.getTemplate(siteId);
-        content = await store.getContent(siteId);
-        styles = await store.getStyles(siteId);
-      }
-    }
-
-    const html = renderTemplate(template, content, styles);
-
-    res.removeHeader('X-Frame-Options');
-    res.removeHeader('Content-Security-Policy');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
-  } catch (err) {
-    console.error('[sites.render] Error:', err.message);
-    res.status(500).json({ error: { message: 'Internal server error' } });
-  }
-}
+export { preview as render };
 
 export async function deleteSite(req, res) {
   try {
