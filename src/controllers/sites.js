@@ -870,3 +870,57 @@ export async function saveGlobalSettings(req, res) {
     res.status(500).json({ error: { message: 'Internal server error' } });
   }
 }
+
+// ── Submissions (Inbox) ──
+
+export async function listSubmissions(req, res) {
+  try {
+    const { siteId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const result = await store.listSubmissions(siteId, { page, limit });
+    const totalPages = Math.ceil((result.total || 0) / limit);
+    res.json({
+      submissions: result.items,
+      total: result.total,
+      page: result.page,
+      totalPages,
+    });
+  } catch (err) {
+    console.error('[sites.listSubmissions] Error:', err.message);
+    res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}
+
+export async function getUnreadCount(req, res) {
+  try {
+    const { siteId } = req.params;
+    const count = await store.getUnreadCount(siteId);
+    res.json({ count });
+  } catch (err) {
+    console.error('[sites.getUnreadCount] Error:', err.message);
+    res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}
+
+export async function markSubmissionRead(req, res) {
+  try {
+    const { siteId, submissionId } = req.params;
+    await store.markSubmissionRead(siteId, submissionId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[sites.markSubmissionRead] Error:', err.message);
+    res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}
+
+export async function deleteSubmission(req, res) {
+  try {
+    const { siteId, submissionId } = req.params;
+    await store.deleteSubmission(siteId, submissionId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[sites.deleteSubmission] Error:', err.message);
+    res.status(500).json({ error: { message: 'Internal server error' } });
+  }
+}

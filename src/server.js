@@ -12,6 +12,7 @@ import editorRouter from './routes/editor.js';
 import publishRouter from './routes/publish.js';
 import chatRouter from './routes/chat.js';
 import uploadRouter from './routes/upload.js';
+import formsRouter from './routes/forms.js';
 import { requireOwner } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { getStore } from './storage/index.js';
@@ -100,6 +101,9 @@ app.get('/api/public/site/:siteId', async (req, res) => {
   if (!meta) return res.status(404).json({ error: { message: 'Not found' } });
   res.json({ name: meta.name, clientDisplayName: meta.clientDisplayName });
 });
+
+// Public forms endpoint — permissive CORS, smaller body limit
+app.use('/api/public/forms', cors(), express.json({ limit: '50kb' }), formsRouter);
 
 app.use('/api/auth', authRouter);
 app.use('/api/sites', sitesRouter);

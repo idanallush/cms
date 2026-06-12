@@ -61,7 +61,7 @@
         <button class="panel-tab" data-panel="content">Content</button>
         <button class="panel-tab" data-panel="sections">Sections</button>
         <button class="panel-tab" data-panel="seo">SEO</button>
-        <button class="panel-tab" data-panel="inbox">Inbox</button>
+        <button class="panel-tab" data-panel="inbox">Inbox <span class="tab-badge hidden">0</span></button>
       </div>
 
       <!-- Editor Panel -->
@@ -299,13 +299,8 @@
         </div>
       </div>
 
-      <!-- Inbox Panel (placeholder) -->
-      <div id="panel-inbox" class="panel-content">
-        <div class="panel-empty">
-          <p>Client messages will appear here</p>
-          <p class="panel-empty-sub">Coming soon</p>
-        </div>
-      </div>
+      <!-- Inbox Panel -->
+      <div id="panel-inbox" class="panel-content"></div>
     </div>
 
     <!-- History overlay panel -->
@@ -382,5 +377,6 @@
   <script src="/js/editor-seo.js"></script>
   <script src="/js/editor-publish.js"></script>
   <script src="/js/editor-chat.js"></script>
+  <script src="/js/editor-inbox.js"></script>
 </body>
 </html>

@@ -180,6 +180,7 @@
           <span class="site-card-status ${status.cls}">${status.label}</span>
         </div>
         <div class="site-card-meta">${pageCount} page · ${vCount} versions in history</div>
+          <div class="site-card-inbox-badge hidden" data-site-inbox="${site.siteId}"></div>
 
         <div class="site-card-actions">
           <button class="btn-action" data-action="edit" data-id="${site.siteId}">&#9998; Open editor</button>
@@ -240,6 +241,22 @@
         const card = createSiteCard(site);
         card.style.animationDelay = `${i * 60}ms`;
         sitesGrid.appendChild(card);
+      });
+
+      // Fetch unread counts for all sites
+      sites.forEach(async (site) => {
+        try {
+          const countRes = await fetch(`${API}/${site.siteId}/submissions/unread-count`);
+          if (!countRes.ok) return;
+          const { count } = await countRes.json();
+          if (count > 0) {
+            const badge = document.querySelector(`[data-site-inbox="${site.siteId}"]`);
+            if (badge) {
+              badge.textContent = `${count} new submission${count > 1 ? 's' : ''}`;
+              badge.classList.remove('hidden');
+            }
+          }
+        } catch (e) { /* silent */ }
       });
     } catch (err) {
       sitesGrid.innerHTML = '<p class="loading-text" style="color:#999999;">Failed to load sites</p>';

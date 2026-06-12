@@ -168,6 +168,7 @@ window.CMS.fn = {};
       }
       if (tab.dataset.panel === 'sections' && CMS.fn.buildSectionsList) CMS.fn.buildSectionsList();
       if (tab.dataset.panel === 'seo' && CMS.fn.loadSeo) CMS.fn.loadSeo();
+      if (tab.dataset.panel === 'inbox' && CMS.fn.loadInbox) CMS.fn.loadInbox();
     });
   });
 
@@ -452,6 +453,7 @@ window.CMS.fn = {};
       await Promise.all([fn.loadContent(), fn.loadStyles()]);
       fn.loadIframe();
       if (CMS.fn.loadPublishStatus) CMS.fn.loadPublishStatus();
+      if (CMS.fn.updateInboxBadge) CMS.fn.updateInboxBadge();
     } catch (err) {
       showToast('Failed to load site: ' + err.message, 'error');
     }

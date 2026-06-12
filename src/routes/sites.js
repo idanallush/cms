@@ -41,6 +41,12 @@ router.put('/:siteId/pages/:pageId/styles', requireSiteAccess, asyncHandler(ctrl
 router.get('/:siteId/pages/:pageId/seo', requireSiteAccess, asyncHandler(ctrl.getPageSeoHandler));
 router.put('/:siteId/pages/:pageId/seo', requireSiteAccess, asyncHandler(ctrl.savePageSeoHandler));
 
+// Submissions (Inbox)
+router.get('/:siteId/submissions', requireSiteAccess, asyncHandler(ctrl.listSubmissions));
+router.get('/:siteId/submissions/unread-count', requireSiteAccess, asyncHandler(ctrl.getUnreadCount));
+router.put('/:siteId/submissions/:submissionId/read', requireSiteAccess, asyncHandler(ctrl.markSubmissionRead));
+router.delete('/:siteId/submissions/:submissionId', requireSiteAccess, asyncHandler(ctrl.deleteSubmission));
+
 router.delete('/:siteId', requireOwner, asyncHandler(ctrl.deleteSite));
 router.put('/:siteId/settings', requireOwner, asyncHandler(ctrl.updateSettings));
 router.post('/:siteId/password', requireOwner, asyncHandler(ctrl.setClientPassword));

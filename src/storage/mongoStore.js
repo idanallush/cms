@@ -57,8 +57,21 @@ const versionSchema = new Schema({
 
 versionSchema.index({ siteId: 1, createdAt: -1 });
 
+const submissionSchema = new Schema({
+  siteId: { type: String, required: true },
+  fields: { type: Schema.Types.Mixed, required: true },
+  pageUrl: { type: String, default: '' },
+  ipHash: { type: String, default: '' },
+  isSpam: { type: Boolean, default: false },
+  isRead: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+});
+
+submissionSchema.index({ siteId: 1, createdAt: -1 });
+
 const Site = model('Site', siteSchema);
 const Version = model('Version', versionSchema);
+const Submission = model('Submission', submissionSchema);
 
 // ── Connection (serverless-optimized with global cache) ──
 
@@ -598,6 +611,66 @@ export async function savePageSeo(siteId, pageId, seo) {
     );
   } catch (err) {
     console.error('[mongoStore.savePageSeo] Error:', err.message);
+    throw err;
+  }
+}
+
+// ── Submissions (Form Inbox) ──
+
+export async function createSubmission(data) {
+  try {
+    const sub = await Submission.create(data);
+    return sub.toObject();
+  } catch (err) {
+    console.error('[mongoStore.createSubmission] Error:', err.message);
+    throw err;
+  }
+}
+
+export async function listSubmissions(siteId, { page = 1, limit = 50, includeSpam = false } = {}) {
+  try {
+    const query = { siteId };
+    if (!includeSpam) query.isSpam = false;
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      Submission.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Submission.countDocuments(query),
+    ]);
+    return { items, total, page, limit };
+  } catch (err) {
+    console.error('[mongoStore.listSubmissions] Error:', err.message);
+    throw err;
+  }
+}
+
+export async function getUnreadCount(siteId) {
+  try {
+    return await Submission.countDocuments({ siteId, isSpam: false, isRead: false });
+  } catch (err) {
+    console.error('[mongoStore.getUnreadCount] Error:', err.message);
+    return 0;
+  }
+}
+
+export async function markSubmissionRead(siteId, submissionId) {
+  try {
+    const result = await Submission.updateOne(
+      { _id: submissionId, siteId },
+      { $set: { isRead: true } }
+    );
+    return result.modifiedCount > 0;
+  } catch (err) {
+    console.error('[mongoStore.markSubmissionRead] Error:', err.message);
+    throw err;
+  }
+}
+
+export async function deleteSubmission(siteId, submissionId) {
+  try {
+    const result = await Submission.deleteOne({ _id: submissionId, siteId });
+    return result.deletedCount > 0;
+  } catch (err) {
+    console.error('[mongoStore.deleteSubmission] Error:', err.message);
     throw err;
   }
 }

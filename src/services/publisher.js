@@ -64,7 +64,7 @@ async function vercelFetchWithRetry(url, options, retries = 1) {
   }
 }
 
-export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
+export function generatePublishHtml(frozenTemplate, contentMap, meta, styles, options = {}) {
   let html = renderTemplate(frozenTemplate, contentMap, styles);
 
   const $ = cheerio.load(html, { decodeEntities: false });
@@ -84,7 +84,45 @@ export function generatePublishHtml(frozenTemplate, contentMap, meta, styles) {
     }
   }
 
+  // Inject form-capture script for published output only
+  if (options.siteId && options.cmsUrl) {
+    const formScript = buildFormCaptureScript(options.cmsUrl, options.siteId);
+    if ($('body').length) {
+      $('body').append(formScript);
+    }
+  }
+
   return $.html();
+}
+
+function buildFormCaptureScript(cmsUrl, siteId) {
+  const apiUrl = `${cmsUrl}/api/public/forms/${siteId}`;
+  return `<script>
+(function(){
+  var CMS_API='${apiUrl}';
+  document.addEventListener('submit',function(e){
+    var form=e.target;
+    if(!form||form.tagName!=='FORM')return;
+    e.preventDefault();
+    var fields={};
+    new FormData(form).forEach(function(v,k){fields[k]=String(v).slice(0,2000);});
+    var btn=form.querySelector('[type="submit"]');
+    var orig=btn?btn.textContent:'';
+    if(btn){btn.disabled=true;btn.textContent='...';}
+    fetch(CMS_API,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fields:fields,pageUrl:location.href})
+    }).then(function(){
+      form.reset();
+      if(btn){btn.textContent='\\u2713 \\u05E0\\u05E9\\u05DC\\u05D7 \\u05D1\\u05D4\\u05E6\\u05DC\\u05D7\\u05D4';setTimeout(function(){btn.disabled=false;btn.textContent=orig;},3000);}
+    }).catch(function(){
+      if(btn){btn.disabled=false;btn.textContent=orig;}
+      alert('\\u05E9\\u05D2\\u05D9\\u05D0\\u05D4 \\u05D1\\u05E9\\u05DC\\u05D9\\u05D7\\u05D4, \\u05E0\\u05E1\\u05D5 \\u05E9\\u05D5\\u05D1');
+    });
+  },true);
+})();
+</script>`;
 }
 
 function buildSeoBlock(meta) {
@@ -136,6 +174,10 @@ export async function publishToVercel(siteId) {
   const meta = await store.getMeta(siteId);
   if (!meta) throw new Error('Site not found');
 
+  const cmsUrl = process.env.CMS_URL
+    || (await store.getSetting('cms_url'))
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+
   const pages = await store.getPages(siteId);
   let files = [];
 
@@ -146,7 +188,7 @@ export async function publishToVercel(siteId) {
         if (!page || !page.frozenTemplate) return null;
 
         const pageMeta = { ...meta, seo: page.seo || {} };
-        const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles);
+        const html = generatePublishHtml(page.frozenTemplate, page.contentMap, pageMeta, page.styles, { siteId, cmsUrl });
 
         const filePath = page.isIndex || page.slug === 'index'
           ? 'index.html'
@@ -170,7 +212,7 @@ export async function publishToVercel(siteId) {
     const content = await store.getContent(siteId);
     if (!template || !content) throw new Error('Site has no content');
     const styles = await store.getStyles(siteId);
-    const html = generatePublishHtml(template, content, meta, styles);
+    const html = generatePublishHtml(template, content, meta, styles, { siteId, cmsUrl });
     files.push({
       file: 'index.html',
       data: Buffer.from(html).toString('base64'),

@@ -28,6 +28,9 @@ const methods = [
   'getPages', 'getPage', 'getIndexPage', 'addPage', 'deletePage',
   'getPageContent', 'savePageContent',
   'getPageStyles', 'savePageStyles', 'getPageSeo', 'savePageSeo',
+  // Form inbox
+  'createSubmission', 'listSubmissions', 'getUnreadCount',
+  'markSubmissionRead', 'deleteSubmission',
 ];
 
 const proxyStore = {};
@@ -48,4 +51,6 @@ export const {
   getPages, getPage, getIndexPage, addPage, deletePage,
   getPageContent, savePageContent,
   getPageStyles, savePageStyles, getPageSeo, savePageSeo,
+  createSubmission, listSubmissions, getUnreadCount,
+  markSubmissionRead, deleteSubmission,
 } = proxyStore;
