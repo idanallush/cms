@@ -31,6 +31,14 @@ const allowedOrigins = process.env.CMS_URL
     ? []
     : ['http://localhost:3500', 'http://127.0.0.1:3500'];
 
+// ── Public endpoints FIRST (before helmet/global CORS that restrict origins) ──
+// Forms endpoint needs permissive CORS for cross-origin POST from published sites
+app.use('/api/public/forms',
+  cors({ origin: true, methods: ['POST', 'OPTIONS'], maxAge: 86400 }),
+  express.json({ limit: '50kb' }),
+  formsRouter
+);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -101,9 +109,6 @@ app.get('/api/public/site/:siteId', async (req, res) => {
   if (!meta) return res.status(404).json({ error: { message: 'Not found' } });
   res.json({ name: meta.name, clientDisplayName: meta.clientDisplayName });
 });
-
-// Public forms endpoint — permissive CORS, smaller body limit
-app.use('/api/public/forms', cors(), express.json({ limit: '50kb' }), formsRouter);
 
 app.use('/api/auth', authRouter);
 app.use('/api/sites', sitesRouter);

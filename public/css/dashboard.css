@@ -1317,6 +1317,113 @@ body {
   }
 }
 
+/* ── Leads (submissions in manage modal) ── */
+
+.leads-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.leads-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary, #f0f0f3);
+}
+
+.lead-item {
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lead-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+.lead-unread {
+  background: rgba(99,140,255,0.05);
+  border-color: rgba(99,140,255,0.15);
+}
+
+.lead-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.lead-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+.lead-dot.unread {
+  background: #638cff;
+}
+
+.lead-time {
+  font-size: 12px;
+  color: #888;
+}
+
+.lead-btn-delete {
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #888;
+  border-radius: 4px;
+  padding: 1px 7px;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.lead-item:hover .lead-btn-delete {
+  opacity: 1;
+}
+.lead-btn-delete:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.lead-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lead-field {
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.4;
+}
+
+.lead-field-key {
+  color: #ccc;
+  font-weight: 500;
+}
+
+.leads-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Site card inbox badge */
+.site-card-inbox-badge {
+  font-size: 12px;
+  color: #638cff;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
 /* ── Reduced Motion ── */
 @media (prefers-reduced-motion: reduce) {
   *,

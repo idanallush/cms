@@ -89,7 +89,10 @@ export function generatePublishHtml(frozenTemplate, contentMap, meta, styles, op
     const formScript = buildFormCaptureScript(options.cmsUrl, options.siteId);
     if ($('body').length) {
       $('body').append(formScript);
+      console.log(`[publish] Form-capture script injected for site ${options.siteId}`);
     }
+  } else if (options.siteId && !options.cmsUrl) {
+    console.warn(`[publish] Skipped form-capture injection for site ${options.siteId}: no CMS URL`);
   }
 
   return $.html();
@@ -174,9 +177,16 @@ export async function publishToVercel(siteId) {
   const meta = await store.getMeta(siteId);
   if (!meta) throw new Error('Site not found');
 
+  const CMS_PRODUCTION_URL = 'https://client-cms-three.vercel.app';
   const cmsUrl = process.env.CMS_URL
     || (await store.getSetting('cms_url'))
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : CMS_PRODUCTION_URL);
+
+  if (cmsUrl) {
+    console.log(`[publish] Form-capture script will use CMS URL: ${cmsUrl}`);
+  } else {
+    console.warn('[publish] No CMS_URL configured — form capture script will NOT be injected');
+  }
 
   const pages = await store.getPages(siteId);
   let files = [];

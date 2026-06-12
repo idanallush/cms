@@ -122,6 +122,17 @@
         <p class="modal-info" style="margin-top:8px;">Last published: ${publishDate}</p>
       </div>
 
+      <div class="modal-tab-content" id="mtab-leads">
+        <div class="leads-header">
+          <span class="leads-title">Form Submissions</span>
+          <button class="btn-secondary btn-small" id="manage-btn-refresh-leads">&#8635; Refresh</button>
+        </div>
+        <div id="manage-leads-list">
+          <p class="modal-info">Loading...</p>
+        </div>
+        <div id="manage-leads-pagination" class="leads-pagination hidden"></div>
+      </div>
+
       <div class="modal-tab-content" id="mtab-history">
         <div id="manage-history-list">
           <p class="modal-info">Loading versions...</p>
@@ -134,17 +145,138 @@
         { id: 'general', label: 'General' },
         { id: 'client', label: 'Client' },
         { id: 'publishing', label: 'Publishing' },
+        { id: 'leads', label: 'Leads', fetchBadge: true, siteId: site.siteId },
         { id: 'history', label: 'History' },
       ],
       onOpen: () => {
         bindSiteManageEvents(site);
         loadSiteHistory(site.siteId);
+        loadLeads(site.siteId, 1);
+        updateLeadsTabBadge(site.siteId);
       }
     });
   };
 
+  // ── Leads (submissions) in manage modal ──
+
+  let leadsCurrentPage = 1;
+
+  async function updateLeadsTabBadge(siteId) {
+    try {
+      const res = await fetch(`${API}/${siteId}/submissions/unread-count`);
+      if (!res.ok) return;
+      const { count } = await res.json();
+      const tabBtn = modalBody.closest('.modal-content')?.parentElement?.querySelector('[data-tab-id="leads"]')
+        || document.querySelector('[data-tab-id="leads"]');
+      if (tabBtn) {
+        tabBtn.textContent = count > 0 ? `Leads (${count})` : 'Leads';
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  async function loadLeads(siteId, page) {
+    leadsCurrentPage = page || 1;
+    const container = modalBody.querySelector('#manage-leads-list');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`${API}/${siteId}/submissions?page=${leadsCurrentPage}&limit=20`);
+      if (!res.ok) {
+        container.innerHTML = '<p class="modal-info">Could not load submissions.</p>';
+        return;
+      }
+      const data = await res.json();
+      const submissions = data.submissions || [];
+      const totalPages = data.totalPages || 1;
+
+      if (submissions.length === 0) {
+        container.innerHTML = '<p class="modal-info" style="text-align:center;padding:24px 0;color:#888;">אין פניות עדיין</p>';
+        modalBody.querySelector('#manage-leads-pagination')?.classList.add('hidden');
+        return;
+      }
+
+      container.innerHTML = submissions.map(sub => {
+        const fields = sub.fields || {};
+        const keys = Object.keys(fields);
+        const readCls = sub.isRead ? 'lead-read' : 'lead-unread';
+        const time = sub.createdAt ? new Date(sub.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+        const fieldsHtml = keys.map(k =>
+          `<div class="lead-field"><span class="lead-field-key">${escapeHtml(k)}:</span> <span class="lead-field-val">${escapeHtml(String(fields[k]).slice(0, 200))}</span></div>`
+        ).join('');
+
+        return `
+          <div class="lead-item ${readCls}" data-sub-id="${sub._id}">
+            <div class="lead-item-top">
+              <span class="lead-dot ${sub.isRead ? '' : 'unread'}"></span>
+              <span class="lead-time">${escapeHtml(time)}</span>
+              <button class="lead-btn-delete" data-sub-id="${sub._id}" title="Delete">&times;</button>
+            </div>
+            <div class="lead-fields">${fieldsHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Click to mark read + expand
+      container.querySelectorAll('.lead-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+          if (e.target.closest('.lead-btn-delete')) return;
+          const subId = item.dataset.subId;
+          if (item.classList.contains('lead-unread')) {
+            await fetch(`${API}/${siteId}/submissions/${subId}/read`, { method: 'PUT' });
+            item.classList.remove('lead-unread');
+            item.classList.add('lead-read');
+            const dot = item.querySelector('.lead-dot');
+            if (dot) dot.classList.remove('unread');
+            updateLeadsTabBadge(siteId);
+          }
+        });
+      });
+
+      // Delete buttons
+      container.querySelectorAll('.lead-btn-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('Delete this submission?')) return;
+          const subId = btn.dataset.subId;
+          try {
+            await fetch(`${API}/${siteId}/submissions/${subId}`, { method: 'DELETE' });
+            loadLeads(siteId, leadsCurrentPage);
+            updateLeadsTabBadge(siteId);
+          } catch { showToast('Delete failed', 'error'); }
+        });
+      });
+
+      // Pagination
+      const paginationEl = modalBody.querySelector('#manage-leads-pagination');
+      if (totalPages > 1 && paginationEl) {
+        paginationEl.classList.remove('hidden');
+        paginationEl.innerHTML = `
+          <button class="btn-secondary btn-small" id="leads-prev" ${leadsCurrentPage <= 1 ? 'disabled' : ''}>&larr;</button>
+          <span style="font-size:12px;color:#888;">${leadsCurrentPage} / ${totalPages}</span>
+          <button class="btn-secondary btn-small" id="leads-next" ${leadsCurrentPage >= totalPages ? 'disabled' : ''}>&rarr;</button>
+        `;
+        paginationEl.querySelector('#leads-prev')?.addEventListener('click', () => loadLeads(siteId, leadsCurrentPage - 1));
+        paginationEl.querySelector('#leads-next')?.addEventListener('click', () => loadLeads(siteId, leadsCurrentPage + 1));
+      } else if (paginationEl) {
+        paginationEl.classList.add('hidden');
+      }
+    } catch (err) {
+      container.innerHTML = '<p class="modal-info">Could not load submissions.</p>';
+    }
+  }
+
   function bindSiteManageEvents(site) {
     const siteId = site.siteId;
+
+    // Refresh leads button
+    const btnRefreshLeads = modalBody.querySelector('#manage-btn-refresh-leads');
+    if (btnRefreshLeads) {
+      btnRefreshLeads.addEventListener('click', () => {
+        loadLeads(siteId, leadsCurrentPage);
+        updateLeadsTabBadge(siteId);
+      });
+    }
 
     const btnRename = modalBody.querySelector('#manage-btn-rename');
     if (btnRename) {
